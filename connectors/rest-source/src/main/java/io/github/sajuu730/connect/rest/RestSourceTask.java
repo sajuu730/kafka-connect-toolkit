@@ -3,6 +3,7 @@ package io.github.sajuu730.connect.rest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.sajuu730.connect.common.RetryPolicy;
+import io.github.sajuu730.connect.common.TaskMetrics;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.source.SourceTask;
@@ -25,6 +26,7 @@ public final class RestSourceTask extends SourceTask {
     private String bearerToken;
     private long pollIntervalMs;
     private RetryPolicy retryPolicy;
+    private TaskMetrics metrics;
     private volatile boolean running;
     private String lastEmittedId;
 
@@ -47,6 +49,7 @@ public final class RestSourceTask extends SourceTask {
             Map<String, Object> stored = context.offsetStorageReader().offset(partition);
             if (stored != null && stored.get("id") != null) lastEmittedId = stored.get("id").toString();
         }
+        metrics = new TaskMetrics("rest-source");
         running = true;
     }
 
@@ -89,6 +92,7 @@ public final class RestSourceTask extends SourceTask {
             Thread.currentThread().interrupt();
             throw ex;
         } catch (ConnectException ex) {
+            if (metrics != null) metrics.failure();
             throw ex;
         } catch (Exception ex) {
             throw new ConnectException("REST source poll failed", ex);
@@ -104,6 +108,7 @@ public final class RestSourceTask extends SourceTask {
                 if (bearerToken != null && !bearerToken.isBlank())
                     builder.header("Authorization", "Bearer " + bearerToken);
                 var request = builder.GET().build();
+                metrics.request();
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                 int status = response.statusCode();
                 if (status >= 200 && status < 300) return response;
@@ -115,7 +120,10 @@ public final class RestSourceTask extends SourceTask {
             } catch (IOException ex) {
                 lastFailure = ex;
             }
-            if (attempt < retryPolicy.maxAttempts()) sleepWhileRunning(retryPolicy.delayBeforeAttempt(attempt).toMillis());
+            if (attempt < retryPolicy.maxAttempts()) {
+                metrics.retry();
+                sleepWhileRunning(retryPolicy.delayBeforeAttempt(attempt).toMillis());
+            }
         }
         if (!running) throw new ConnectException("REST source task stopped during request");
         throw new ConnectException("REST request failed after " + retryPolicy.maxAttempts() + " attempts", lastFailure);
@@ -133,10 +141,16 @@ public final class RestSourceTask extends SourceTask {
 
     @Override public void commitRecord(SourceRecord record, org.apache.kafka.clients.producer.RecordMetadata metadata) {
         Object committedId = record.sourceOffset().get("id");
-        if (committedId != null) lastEmittedId = committedId.toString();
+        if (committedId != null) {
+            lastEmittedId = committedId.toString();
+            if (metrics != null) metrics.processed(1);
+        }
     }
 
-    @Override public void stop() { running = false; }
+    @Override public void stop() {
+        running = false;
+        if (metrics != null) metrics.close();
+    }
     @Override public String version() { return "0.1.0-SNAPSHOT"; }
 
     private static String required(Map<String, String> props, String key) {
