@@ -21,6 +21,12 @@ wait_for() {
   return 1
 }
 
+connector_tasks_running() {
+  local connector="$1"
+  curl --connect-timeout 2 --max-time 5 -fsS "$CONNECT_URL/connectors/$connector/status" |
+    jq -e '.connector.state == "RUNNING" and (.tasks | length > 0) and all(.tasks[]; .state == "RUNNING")' >/dev/null
+}
+
 wait_for "Kafka Connect REST API" "curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/'"
 wait_for "REST source plugin" "curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connector-plugins' | grep -q 'io.github.sajuu730.connect.rest.RestSourceConnector'"
 wait_for "JDBC sink plugin" "curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connector-plugins' | grep -q 'io.github.sajuu730.connect.jdbc.JdbcSinkConnector'"
@@ -28,7 +34,7 @@ wait_for "JDBC sink plugin" "curl --connect-timeout 2 --max-time 5 -fsS '$CONNEC
 curl --connect-timeout 2 --max-time 5 -fsS -X PUT "$CONNECT_URL/connectors/kct-e2e-source/config" -H 'Content-Type: application/json' -d @config/e2e-source-connector.json >/dev/null
 curl --connect-timeout 2 --max-time 5 -fsS -X PUT "$CONNECT_URL/connectors/kct-e2e-sink/config" -H 'Content-Type: application/json' -d @config/e2e-sink-connector.json >/dev/null
 
-wait_for "source and sink connectors RUNNING" "curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connectors/kct-e2e-source/status' | grep -q 'RUNNING' && curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connectors/kct-e2e-sink/status' | grep -q 'RUNNING'"
+wait_for "source and sink tasks RUNNING" "connector_tasks_running kct-e2e-source && connector_tasks_running kct-e2e-sink"
 wait_for "initial REST record delivered to MySQL" "docker exec '$MYSQL_CONTAINER' mysql -N -u'$MYSQL_USER' -p'$MYSQL_PASSWORD' '$MYSQL_DATABASE' -e \"SELECT id FROM events WHERE id='e2e-1'\" | grep -q '^e2e-1$'"
 
 wait_for "JMX exporter metrics endpoint" "curl --connect-timeout 2 --max-time 5 -fsS http://localhost:5556/metrics"
@@ -41,15 +47,15 @@ wait_for "REST source offset persisted in Connect" "curl --connect-timeout 2 --m
 # Join and remove a second worker to force distributed Connect rebalances.
 docker compose --profile rebalance up -d connect-worker-2 >/dev/null
 wait_for "second Connect worker REST API" "curl --connect-timeout 2 --max-time 5 -fsS http://localhost:8084/"
-wait_for "connectors RUNNING after worker join" "curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connectors/kct-e2e-source/status' | grep -q 'RUNNING' && curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connectors/kct-e2e-sink/status' | grep -q 'RUNNING'"
+wait_for "connectors RUNNING after worker join" "connector_tasks_running kct-e2e-source && connector_tasks_running kct-e2e-sink"
 docker compose stop connect-worker-2 >/dev/null
-wait_for "connectors RUNNING after worker leave" "curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connectors/kct-e2e-source/status' | grep -q 'RUNNING' && curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connectors/kct-e2e-sink/status' | grep -q 'RUNNING'"
+wait_for "connectors RUNNING after worker leave" "connector_tasks_running kct-e2e-source && connector_tasks_running kct-e2e-sink"
 
 # Stop MySQL while a new source record is produced; then restart the sink task.
 docker compose stop mysql >/dev/null
 curl --connect-timeout 2 --max-time 5 -fsS -X PUT "$CONNECT_URL/connectors/kct-recovery-source/config" -H 'Content-Type: application/json' -d @config/e2e-recovery-source-connector.json >/dev/null
 wait_for "recovery source RUNNING" "curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connectors/kct-recovery-source/status' | grep -q 'RUNNING'"
-wait_for "sink task failure during MySQL outage" "curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connectors/kct-e2e-sink/status' | grep -q 'FAILED'"
+wait_for "sink task failure during MySQL outage" 'curl --connect-timeout 2 --max-time 5 -fsS "$CONNECT_URL/connectors/kct-e2e-sink/status" | jq -e "any(.tasks[]; .state == \"FAILED\")" >/dev/null'
 
 docker compose start mysql >/dev/null
 wait_for "MySQL recovery" "docker exec '$MYSQL_CONTAINER' mysqladmin ping -h 127.0.0.1 -u root -proot_local_only"
@@ -60,7 +66,7 @@ wait_for "retained Kafka record delivered after MySQL recovery" "docker exec '$M
 sleep 3
 docker compose restart connect >/dev/null
 wait_for "Connect worker REST API after restart" "curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/'"
-wait_for "connectors RUNNING after worker restart" "curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connectors/kct-e2e-source/status' | grep -q 'RUNNING' && curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connectors/kct-e2e-sink/status' | grep -q 'RUNNING'"
+wait_for "connectors RUNNING after worker restart" "connector_tasks_running kct-e2e-source && connector_tasks_running kct-e2e-sink"
 wait_for "source offset survives Connect restart" "curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connectors/kct-e2e-source/offsets' | grep -q 'e2e-1'"
 wait_for "both records remain in MySQL after restart" "docker exec '$MYSQL_CONTAINER' mysql -N -u'$MYSQL_USER' -p'$MYSQL_PASSWORD' '$MYSQL_DATABASE' -e \"SELECT COUNT(*) FROM events WHERE id IN ('e2e-1','e2e-2')\" | grep -q '^2$'"
 
