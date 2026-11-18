@@ -5,9 +5,92 @@
   "version": 1,
   "refresh": "15s",
   "panels": [
-    {"id":1,"title":"Connector task records processed","type":"timeseries","gridPos":{"h":8,"w":12,"x":0,"y":0},"targets":[{"expr":"kct_recordsprocessed","legendFormat":"{{task_name}}"}]},
-    {"id":2,"title":"Connector retry count","type":"timeseries","gridPos":{"h":8,"w":12,"x":12,"y":0},"targets":[{"expr":"kct_retries","legendFormat":"{{task_name}}"}]},
-    {"id":3,"title":"Connect worker metrics","type":"timeseries","gridPos":{"h":8,"w":12,"x":0,"y":8},"targets":[{"expr":"kafka_connect_worker_*","legendFormat":"{{__name__}}"}]},
-    {"id":4,"title":"DLQ records (topic metrics, if exported)","type":"timeseries","gridPos":{"h":8,"w":12,"x":12,"y":8},"targets":[{"expr":"kafka_server_brokertopicmetrics_messagesin_total{topic=\"connect-dlq\"}","legendFormat":"DLQ messages"}]}
-  ]
+    {
+      "id": 1,
+      "title": "Connector task throughput",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(kafka_connect_connector_task_sink_record_send_total[5m]))",
+          "legendFormat": "records/sec"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 2,
+      "title": "Connector task errors",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(kafka_connect_connector_task_error_total)",
+          "legendFormat": "errors"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      }
+    },
+    {
+      "id": 3,
+      "title": "JVM heap used",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "jvm_memory_bytes_used{area=\"heap\"}",
+          "legendFormat": "heap"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      }
+    },
+    {
+      "id": 4,
+      "title": "DLQ send rate (depends on exporter metric mapping)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(kafka_connect_deadletterqueue_record_send_total[5m]))",
+          "legendFormat": "DLQ records/sec"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
 }
