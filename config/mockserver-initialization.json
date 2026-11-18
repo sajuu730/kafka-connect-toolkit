@@ -1,0 +1,15 @@
+[
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/events"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": [
+        { "name": "Content-Type", "values": ["application/json"] }
+      ],
+      "body": "[{\"id\":\"e2e-1\",\"event_type\":\"created\",\"payload\":{\"source\":\"mock-api\"}}]"
+    }
+  }
+]
