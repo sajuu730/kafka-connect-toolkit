@@ -57,6 +57,7 @@ public final class JdbcSinkTask extends SinkTask {
             if (!(record.value() instanceof Struct struct))
                 throw new ConnectException("JDBC sink currently requires Struct record values");
             List<String> rowColumns = struct.schema().fields().stream().map(Field::name).toList();
+            if (rowColumns.isEmpty()) throw new ConnectException("JDBC sink cannot insert a Struct with no fields");
             if (columns.isEmpty()) columns = rowColumns;
             if (!columns.equals(rowColumns))
                 throw new ConnectException("Record schema changed within task; use a stable target schema");
@@ -142,9 +143,13 @@ public final class JdbcSinkTask extends SinkTask {
     }
 
     @Override public void stop() {
-        if (connection != null) try { connection.close(); }
-        catch (SQLException ex) { throw new ConnectException("Failed to close JDBC connection", ex); }
-        finally { if (metrics != null) metrics.close(); }
+        try {
+            if (connection != null) connection.close();
+        } catch (SQLException ex) {
+            throw new ConnectException("Failed to close JDBC connection", ex);
+        } finally {
+            if (metrics != null) metrics.close();
+        }
     }
     @Override public String version() { return "0.1.0-SNAPSHOT"; }
 
