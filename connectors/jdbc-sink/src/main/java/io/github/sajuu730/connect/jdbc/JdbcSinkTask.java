@@ -71,7 +71,10 @@ public final class JdbcSinkTask extends SinkTask {
                 evolveSchema(struct.schema());
                 validRecords.add(record);
             } catch (SQLException schemaFailure) {
-                reportMalformed(record, new ConnectException("Unable to evolve target table schema", schemaFailure));
+                // Database/DDL failures are infrastructure failures, not poison records.
+                // Sending them to the DLQ could silently discard valid business data.
+                metrics.failure();
+                throw new ConnectException("Unable to evolve target table schema", schemaFailure);
             }
         }
         if (validRecords.isEmpty()) return;
