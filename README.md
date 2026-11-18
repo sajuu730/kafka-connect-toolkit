@@ -4,7 +4,7 @@
 
 A Java 17 multi-module project for custom Kafka Connect integrations: an HTTP REST source and a JDBC sink, with reliability primitives, containerized infrastructure and an evolving observability stack.
 
-> **Status: Active development.** MySQL 8.4 is now the primary local database target. The JDBC sink has a MySQL `ON DUPLICATE KEY UPDATE` SQL path and the local Compose stack includes Kafka, Schema Registry, Kafka Connect, MySQL, Prometheus, a JMX exporter and Grafana. This is not a production-readiness claim: the baseline REST-to-MySQL pipeline and worker restart have passed CI. The expanded suite now adds MySQL outage/replay, source-offset persistence, second-worker rebalancing and live monitoring assertions; that expanded run is still being validated. The REST cursor contract remains limited to stable ascending IDs.
+> **Status: Active development.** MySQL 8.4 is now the primary local database target. The JDBC sink has a MySQL `ON DUPLICATE KEY UPDATE` SQL path and the local Compose stack includes Kafka, Schema Registry, Kafka Connect, MySQL, Prometheus alert rules, a JMX exporter and Grafana. This is not a production-readiness claim: the baseline REST-to-MySQL pipeline and worker restart have passed CI. The expanded suite now adds MySQL outage/replay, source-offset persistence, second-worker rebalancing and live monitoring assertions; that expanded run is still being validated. The REST cursor contract remains limited to stable ascending IDs.
 
 ## Current implementation
 
@@ -110,7 +110,7 @@ The local password is demonstrative and must never be reused in a deployed envir
 - [x] Additive nullable-column schema evolution policy
 - [ ] Broader database dialect coverage and schema-evolution fault tests
 - [x] ErrantRecordReporter-based malformed-record reporting
-- [x] Explicit JMX exporter mappings and Grafana panels for sink lag, throughput, retries, failures, DLQ routing and last-success time
+- [x] Explicit JMX exporter mappings, Prometheus alert rules and Grafana panels for sink lag, throughput, retries, failures, DLQ routing and last-success time
 - [ ] Validate metric scrape and dashboard queries against a live stack
 - [x] Connect worker restart exercised by the end-to-end smoke test
 - [ ] Validate the expanded rebalance and database-outage/recovery scenarios in a successful CI run
