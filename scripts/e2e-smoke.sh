@@ -46,6 +46,7 @@ wait_for "malformed record delivered to DLQ" "docker exec '$KAFKA_CONTAINER' kaf
 
 wait_for "JMX exporter metrics endpoint" "curl --connect-timeout 2 --max-time 5 -fsS http://localhost:5556/metrics"
 wait_for "toolkit records metric exposed" "curl --connect-timeout 2 --max-time 5 -fsS http://localhost:5556/metrics | grep -q 'kct_records_processed_total'"
+wait_for "DLQ routing counter incremented" "curl --connect-timeout 2 --max-time 5 -fsS http://localhost:5556/metrics | awk '\$1 ~ /^kct_dlq_records_routed_total/ && \$NF > 0 {found=1} END {exit !found}'"
 wait_for "Prometheus ready" "curl --connect-timeout 2 --max-time 5 -fsS http://localhost:9090/-/ready"
 wait_for "Prometheus scrape target UP" 'curl --connect-timeout 2 --max-time 5 -fsS "http://localhost:9090/api/v1/query?query=up%7Bjob%3D%22kafka-connect-jmx%22%7D" | jq -e ".data.result[0].value[1] == \"1\"" >/dev/null'
 wait_for "Prometheus sees toolkit metric" 'curl --connect-timeout 2 --max-time 5 -fsS "http://localhost:9090/api/v1/query?query=kct_records_processed_total" | grep -q "kct_records_processed_total"'
