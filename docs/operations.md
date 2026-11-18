@@ -7,6 +7,9 @@ mvn --batch-mode clean package
 docker compose up -d
 docker compose ps
 curl http://localhost:8083/connector-plugins
+
+# Exercise REST -> Kafka/Avro/Schema Registry -> MySQL, including worker restart
+bash scripts/e2e-smoke.sh
 ```
 Local services: Kafka `localhost:9092`, Schema Registry `http://localhost:8081`, Kafka Connect `http://localhost:8083`, MySQL `localhost:3306`, Prometheus `http://localhost:9090`, Grafana `http://localhost:3000`, and JMX exporter `http://localhost:5556/metrics`.
 
@@ -26,11 +29,14 @@ docker compose restart connect
 | `rest.pagination.page.parameter` | empty | Query parameter name for page-number pagination |
 | `rest.pagination.start.page` | `1` | First page number |
 | `rest.pagination.max.pages` | `100` | Hard maximum pages fetched per poll |
+| `rest.incremental.cursor.parameter` | empty | Optional query parameter populated with the last committed record ID |
 | `poll.interval.ms` | `5000` | Delay when no new records are available |
 | `retry.max.attempts` | `3` | Total attempts for a request |
 | `retry.initial.backoff.ms` | `500` | Initial capped exponential retry delay |
 
-The source task reads the saved ID offset during startup and resumes after that ID if it is present in the fetched snapshot. If the ID disappears, the current implementation replays the snapshot. It requires stable unique IDs and deterministic API ordering. General cursor strategies and HTTP `Retry-After` support are not yet implemented.
+The source task reads the saved ID offset during startup and filters out records at or below that ID. Numeric IDs use numeric comparison; other IDs use lexical comparison. When `rest.incremental.cursor.parameter` is set, the last committed ID is also sent to the API as a query parameter. The source emits typed Kafka Connect `Struct` values: primitive JSON values retain their scalar types, while nested objects and arrays are encoded as compact JSON strings. This supports schema-aware converters such as AvroConverter.
+
+This checkpoint contract requires stable, unique, monotonically ascending IDs. It does not implement opaque cursors, arbitrary next-page tokens/links, compound keys or out-of-order API semantics. The optional query cursor must match the remote API's contract. HTTP 429/503 responses honor `Retry-After` delta-seconds or HTTP-date values (capped at five minutes); other transient HTTP/I/O errors use bounded exponential backoff.
 
 ## JDBC sink configuration
 | Property | Default | Meaning |
@@ -45,15 +51,13 @@ The source task reads the saved ID offset during startup and resumes after that 
 | `retry.max.attempts` | `3` | Attempts for transient SQL execution failures |
 | `retry.initial.backoff.ms` | `500` | Initial capped exponential retry delay |
 
-For MySQL URLs, `insert.mode=upsert` generates `INSERT ... ON DUPLICATE KEY UPDATE`. MySQL uses the table's PRIMARY KEY or UNIQUE index to identify a duplicate; `pk.fields` is validated against the incoming Struct fields but does not appear as a MySQL conflict target. PostgreSQL/H2 test URLs retain the `ON CONFLICT` branch. The target table must already exist and match the incoming Struct schema.
-
-Schema changes within a task currently fail explicitly; automatic schema evolution is not implemented. The sink currently requires Kafka Connect `Struct` values. The local Connect worker is configured with Avro for values, so records produced by the REST source (currently string-schema JSON payloads) need a compatible transformation/converter pipeline before they can be consumed by this sink. A complete source-to-sink Avro pipeline is part of the integration-test roadmap.
+For MySQL URLs, `insert.mode=upsert` generates `INSERT ... ON DUPLICATE KEY UPDATE`. MySQL uses the table's PRIMARY KEY or UNIQUE index to identify a duplicate; `pk.fields` is validated against the incoming Struct fields but does not appear as a MySQL conflict target. PostgreSQL/H2 test URLs retain the `ON CONFLICT` branch. The target table should exist before connector startup. When new Struct fields appear, the sink performs additive-only schema evolution by adding nullable columns; it never alters existing column types or drops columns. Review database DDL permissions and schema policy before production use. A DDL/schema failure is treated as an infrastructure failure and fails the task rather than routing valid data to the DLQ.
 
 ## Dead-letter queue
-The local worker enables `errors.tolerance=all` and `errors.deadletterqueue.topic.name=connect-dlq`. This is worker-level Connect error handling; the connector does not yet invoke `ErrantRecordReporter` for individual malformed records. DLQ behavior does not turn source HTTP outages or task-level failures into individual bad-record messages. Review DLQ topic security, retention, replication and payload sensitivity before production use.
+The local worker enables `errors.tolerance=all` and `errors.deadletterqueue.topic.name=connect-dlq`. The JDBC sink invokes Kafka Connect `ErrantRecordReporter` for malformed non-Struct and empty-Struct records, waits for the report future, and increments the toolkit DLQ JMX counter after a successful report. The worker must supply the reporter by enabling DLQ/error handling. Database outages, DDL failures and other task-level infrastructure failures fail/retry the task; they are not mislabeled as bad individual records. Review DLQ topic security, retention, replication and payload sensitivity before production use.
 
 ## Observability
-The Compose stack includes a JMX exporter endpoint, Prometheus scrape configuration and provisioned Grafana dashboard. Treat the dashboard and metric mappings as scaffolding until validated against a running deployment. The toolkit task metrics expose counters for records, batches, requests, retries, failures and last successful operation when JMX registration is available.
+The Compose stack includes a JMX exporter endpoint, Prometheus scrape configuration and provisioned Grafana dashboard. The JMX exporter configuration maps toolkit MBeans to `kct_records_processed_total`, `kct_batches_completed_total`, `kct_http_requests_total`, `kct_retries_total`, `kct_failures_total`, `kct_dlq_records_routed_total` and `kct_last_success_time_epoch_ms`. Grafana panels use these explicit names. Verify `/metrics` contains them and confirm Prometheus targets are UP after starting the stack; metric names and scrape behavior still require a successful live CI run.
 
 ## Production considerations
 Do not deploy local Compose credentials or plaintext listeners to production. Use TLS/SASL, secret/config providers, replicated internal Connect topics, suitable replication factors, monitored DLQ retention and a managed database connection policy. The current project is under active development and is not yet certified production-ready.
