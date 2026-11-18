@@ -6,6 +6,8 @@
 
 A Java 17 multi-module project demonstrating custom Kafka Connect integrations: an HTTP REST source connector and a JDBC sink connector, supported by retry primitives, containerized infrastructure, and an observability stack.
 
+> **Portfolio project:** an independently developed engineering demonstration using local infrastructure and synthetic data. It is not affiliated with, or connected to, an employer, customer environment or proprietary system.
+>
 > **Project status: Active development.** The latest completed CI run passed Maven verification and the end-to-end smoke-test job. Later documentation commits have triggered a fresh CI run; check the Actions page for its final result. This validates only the scenarios exercised by CI, not production readiness. The REST source checkpoint contract remains limited to stable, monotonically ascending IDs.
 
 ## Highlights
@@ -107,3 +109,7 @@ The GitHub Actions workflow runs Maven verification and Docker-based end-to-end 
 ## Production considerations
 
 Do not deploy local Compose credentials or plaintext listeners to production. Use TLS/SASL, secret/config providers, replicated internal Connect topics, suitable replication factors, monitored DLQ retention, and an appropriate database connection policy. This project is an engineering demonstration under active development, not a certified production distribution.
+
+## License
+
+MIT. See LICENSE.
