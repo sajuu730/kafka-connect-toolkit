@@ -119,10 +119,10 @@ class RestSourceTaskTest {
             byte[] body;
             if (calls.incrementAndGet() == 1) {
                 exchange.getResponseHeaders().add("Retry-After", "0");
-                body = "{\\"error\\":\\"rate limited\\"}".getBytes(StandardCharsets.UTF_8);
+                body = "{\"error\":\"rate limited\"}".getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(429, body.length);
             } else {
-                body = "[{\\"id\\":\\"after-limit\\"}]".getBytes(StandardCharsets.UTF_8);
+                body = "[{\"id\":\"after-limit\"}]".getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(200, body.length);
             }
             exchange.getResponseBody().write(body);
