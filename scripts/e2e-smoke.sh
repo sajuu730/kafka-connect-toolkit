@@ -41,8 +41,30 @@ wait_for "initial REST record delivered to MySQL" "docker exec '$MYSQL_CONTAINER
 # Route a non-Struct Connect value through ErrantRecordReporter into the DLQ.
 curl --connect-timeout 2 --max-time 5 -fsS -X PUT "$CONNECT_URL/connectors/kct-e2e-dlq-sink/config" -H 'Content-Type: application/json' -d @config/e2e-dlq-sink-connector.json >/dev/null
 wait_for "DLQ sink task RUNNING" "connector_tasks_running kct-e2e-dlq-sink"
+# Keep one consumer attached while the poison record is produced. Recreating a
+# consumer on every poll can race topic assignment and makes diagnostics opaque.
+DLQ_CAPTURE="$(mktemp)"
+DLQ_CONSUMER_PID=""
+cleanup_dlq_consumer() {
+  if [[ -n "$DLQ_CONSUMER_PID" ]]; then
+    kill "$DLQ_CONSUMER_PID" >/dev/null 2>&1 || true
+    wait "$DLQ_CONSUMER_PID" >/dev/null 2>&1 || true
+  fi
+  rm -f "$DLQ_CAPTURE"
+}
+trap cleanup_dlq_consumer EXIT
+
+docker exec "$KAFKA_CONTAINER" kafka-console-consumer --bootstrap-server kafka:29092 \
+  --topic connect-dlq --from-beginning --property print.headers=true --timeout-ms 180000 \
+  >"$DLQ_CAPTURE" 2>&1 &
+DLQ_CONSUMER_PID=$!
+sleep 2
 printf '%s\n' '{"schema":{"type":"string","optional":false},"payload":"not-a-struct"}' | docker exec -i "$KAFKA_CONTAINER" kafka-console-producer --bootstrap-server kafka:29092 --topic kct-dlq-test
-wait_for "malformed record delivered to DLQ" "docker exec '$KAFKA_CONTAINER' kafka-console-consumer --bootstrap-server kafka:29092 --topic connect-dlq --from-beginning --max-messages 1 --timeout-ms 1000 | grep -q 'not-a-struct'"
+wait_for "malformed record delivered to DLQ" "grep -q 'not-a-struct' '$DLQ_CAPTURE'"
+kill "$DLQ_CONSUMER_PID" >/dev/null 2>&1 || true
+wait "$DLQ_CONSUMER_PID" >/dev/null 2>&1 || true
+DLQ_CONSUMER_PID=""
+
 
 wait_for "JMX exporter metrics endpoint" "curl --connect-timeout 2 --max-time 5 -fsS http://localhost:5556/metrics"
 wait_for "toolkit records metric exposed" "curl --connect-timeout 2 --max-time 5 -fsS http://localhost:5556/metrics | grep -q 'kct_records_processed_total'"
