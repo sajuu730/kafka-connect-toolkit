@@ -28,13 +28,16 @@ docker compose restart connect
 | `kafka.topic` | required | Destination topic |
 | `record.id.field` | `id` | Stable identifier field used as the source offset |
 | `rest.auth.bearer.token` | empty | Optional bearer token; use a secret/config provider in production |
+| `rest.pagination.page.parameter` | empty | Query parameter name for page-number pagination; empty disables pagination |
+| `rest.pagination.start.page` | `1` | First page number when pagination is enabled |
+| `rest.pagination.max.pages` | `100` | Hard maximum pages fetched per poll; reaching the limit fails the poll rather than silently truncating results |
 | `poll.interval.ms` | `5000` | Delay when no new records are available; minimum 100 ms |
 | `retry.max.attempts` | `3` | Total attempts for a request |
 | `retry.initial.backoff.ms` | `500` | Initial capped exponential retry delay |
 
 Requests have a 10-second connection timeout and 30-second request timeout. HTTP 429, 5xx, and I/O failures are retried; other non-2xx responses fail immediately. Backoff is capped at 30 seconds and includes jitter.
 
-The endpoint must return objects with unique, stable IDs in deterministic order. The optional bearer token is sent in the HTTP Authorization header and is never written to application logs. The source task resumes after the last stored ID if it is still present in the snapshot. If it is absent, the task replays the current snapshot. This connector does not yet support authentication, pagination, rate-limit headers, or server-side incremental cursors. The source task emits JSON text using a Kafka Connect string schema.
+When page-number pagination is enabled, the endpoint must return JSON arrays and an empty array to signal the end of the result set. The configured maximum page count prevents an unbounded poll. The endpoint must return objects with unique, stable IDs in deterministic order. The optional bearer token is sent in the HTTP Authorization header and is never written to application logs. The source task resumes after the last stored ID if it is still present in the snapshot. If it is absent, the task replays the current snapshot. This connector does not yet support authentication, pagination, rate-limit headers, or server-side incremental cursors. The source task emits JSON text using a Kafka Connect string schema.
 
 ## JDBC sink configuration
 
