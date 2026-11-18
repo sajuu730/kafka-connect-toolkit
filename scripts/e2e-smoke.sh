@@ -42,7 +42,7 @@ curl -fsS -X PUT "$CONNECT_URL/connectors/kct-e2e-sink/config" \
   -d '{
     "connector.class":"io.github.sajuu730.connect.jdbc.JdbcSinkConnector",
     "tasks.max":"1",
-    "topics":"kct-e2e-events",
+    "topics":"kct-e2e-events,kct-recovery-events",
     "connection.url":"jdbc:mysql://mysql:3306/connect_demo",
     "connection.user":"connect",
     "connection.password":"connect_local_only",
@@ -55,6 +55,35 @@ curl -fsS -X PUT "$CONNECT_URL/connectors/kct-e2e-sink/config" \
 wait_for "source and sink connectors RUNNING" "curl -fsS '$CONNECT_URL/connectors/kct-e2e-source/status' | grep -q 'RUNNING' && curl -fsS '$CONNECT_URL/connectors/kct-e2e-sink/status' | grep -q 'RUNNING'"
 
 wait_for "record delivered to MySQL" "docker exec '$MYSQL_CONTAINER' mysql -N -u'$MYSQL_USER' -p'$MYSQL_PASSWORD' '$MYSQL_DATABASE' -e \"SELECT id FROM events WHERE id='e2e-1'\" | grep -q '^e2e-1$'"
+
+# Force a sink-task failure while MySQL is unavailable, then verify replay after recovery.
+docker compose stop mysql >/dev/null
+curl -fsS -X PUT "$CONNECT_URL/connectors/kct-recovery-source/config" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "connector.class":"io.github.sajuu730.connect.rest.RestSourceConnector",
+    "tasks.max":"1",
+    "rest.endpoint":"http://mock-api:1080/recovery",
+    "kafka.topic":"kct-recovery-events",
+    "poll.interval.ms":"500",
+    "retry.max.attempts":"3",
+    "retry.initial.backoff.ms":"100"
+  }' >/dev/null
+wait_for "recovery source RUNNING" "curl -fsS '$CONNECT_URL/connectors/kct-recovery-source/status' | grep -q 'RUNNING'"
+wait_for "sink task failure during MySQL outage" "curl -fsS '$CONNECT_URL/connectors/kct-e2e-sink/status' | grep -q 'FAILED'"
+
+docker compose start mysql >/dev/null
+wait_for "MySQL recovery" "docker exec '$MYSQL_CONTAINER' mysqladmin ping -h 127.0.0.1 -u root -proot_local_only"
+curl -fsS -X POST "$CONNECT_URL/connectors/kct-e2e-sink/tasks/0/restart" >/dev/null
+wait_for "replayed recovery record delivered to MySQL" "docker exec '$MYSQL_CONTAINER' mysql -N -u'$MYSQL_USER' -p'$MYSQL_PASSWORD' '$MYSQL_DATABASE' -e \"SELECT id FROM events WHERE id='e2e-2'\" | grep -q '^e2e-2
+sleep 3
+docker compose restart connect >/dev/null
+wait_for "Connect worker after restart" "curl -fsS '$CONNECT_URL/'"
+wait_for "connectors RUNNING after restart" "curl -fsS '$CONNECT_URL/connectors/kct-e2e-source/status' | grep -q 'RUNNING' && curl -fsS '$CONNECT_URL/connectors/kct-e2e-sink/status' | grep -q 'RUNNING'"
+wait_for "idempotent row remains after worker restart" "docker exec '$MYSQL_CONTAINER' mysql -N -u'$MYSQL_USER' -p'$MYSQL_PASSWORD' '$MYSQL_DATABASE' -e \"SELECT COUNT(*) FROM events WHERE id='e2e-1'\" | grep -q '^1$'"
+
+echo "E2E smoke test passed: REST -> Kafka/Avro/Schema Registry -> JDBC/MySQL, including Connect worker restart."
+"
 
 # Allow the worker to flush source offsets before restarting it.
 sleep 3
