@@ -3,6 +3,7 @@ set -euo pipefail
 
 CONNECT_URL="${CONNECT_URL:-http://localhost:8083}"
 MYSQL_CONTAINER="${MYSQL_CONTAINER:-$(docker compose ps -q mysql)}"
+KAFKA_CONTAINER="${KAFKA_CONTAINER:-$(docker compose ps -q kafka)}"
 MYSQL_USER="${MYSQL_USER:-connect}"
 MYSQL_PASSWORD="${MYSQL_PASSWORD:-connect_local_only}"
 MYSQL_DATABASE="${MYSQL_DATABASE:-connect_demo}"
@@ -36,6 +37,12 @@ curl --connect-timeout 2 --max-time 5 -fsS -X PUT "$CONNECT_URL/connectors/kct-e
 
 wait_for "source and sink tasks RUNNING" "connector_tasks_running kct-e2e-source && connector_tasks_running kct-e2e-sink"
 wait_for "initial REST record delivered to MySQL" "docker exec '$MYSQL_CONTAINER' mysql -N -u'$MYSQL_USER' -p'$MYSQL_PASSWORD' '$MYSQL_DATABASE' -e \"SELECT id FROM events WHERE id='e2e-1'\" | grep -q '^e2e-1$'"
+
+# Route a non-Struct Connect value through ErrantRecordReporter into the DLQ.
+curl --connect-timeout 2 --max-time 5 -fsS -X PUT "$CONNECT_URL/connectors/kct-e2e-dlq-sink/config" -H 'Content-Type: application/json' -d @config/e2e-dlq-sink-connector.json >/dev/null
+wait_for "DLQ sink task RUNNING" "connector_tasks_running kct-e2e-dlq-sink"
+printf '%s\\n' '{"schema":{"type":"string","optional":false},"payload":"not-a-struct"}' | docker exec -i "$KAFKA_CONTAINER" kafka-console-producer --bootstrap-server kafka:29092 --topic kct-dlq-test
+wait_for "malformed record delivered to DLQ" "docker exec '$KAFKA_CONTAINER' kafka-console-consumer --bootstrap-server kafka:29092 --topic connect-dlq --from-beginning --max-messages 1 --timeout-ms 10000 | grep -q 'not-a-struct'"
 
 wait_for "JMX exporter metrics endpoint" "curl --connect-timeout 2 --max-time 5 -fsS http://localhost:5556/metrics"
 wait_for "toolkit records metric exposed" "curl --connect-timeout 2 --max-time 5 -fsS http://localhost:5556/metrics | grep -q 'kct_records_processed_total'"
