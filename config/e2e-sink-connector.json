@@ -1,0 +1,12 @@
+{
+  "connector.class": "io.github.sajuu730.connect.jdbc.JdbcSinkConnector",
+  "tasks.max": "1",
+  "topics": "kct-e2e-events,kct-recovery-events",
+  "connection.url": "jdbc:mysql://mysql:3306/connect_demo",
+  "connection.user": "connect",
+  "connection.password": "connect_local_only",
+  "table.name": "events",
+  "insert.mode": "upsert",
+  "pk.fields": "id",
+  "batch.size": "2"
+}
