@@ -4,13 +4,14 @@
 
 A Java 17 multi-module project for custom Kafka Connect integrations: an HTTP REST source and a JDBC sink, with reliability primitives, containerized infrastructure and an evolving observability stack.
 
-> **Status: Active development.** MySQL 8.4 is now the primary local database target. The JDBC sink has a MySQL `ON DUPLICATE KEY UPDATE` SQL path and the local Compose stack includes Kafka, Schema Registry, Kafka Connect, MySQL, Prometheus, a JMX exporter and Grafana. This is not a production-readiness claim: the REST cursor contract is intentionally limited to stable ascending IDs, and full Kafka Connect end-to-end fault-recovery verification remains outstanding.
+> **Status: Active development.** MySQL 8.4 is now the primary local database target. The JDBC sink has a MySQL `ON DUPLICATE KEY UPDATE` SQL path and the local Compose stack includes Kafka, Schema Registry, Kafka Connect, MySQL, Prometheus, a JMX exporter and Grafana. This is not a production-readiness claim: the REST cursor contract is intentionally limited to stable ascending IDs, and the new Docker-based end-to-end CI job still needs a successful run before its runtime behavior is considered verified.
 
 ## Current implementation
 
 ### REST source
 - Java `HttpClient` polling with bounded connect/request timeouts
 - JSON object/array decoding and page-number pagination with a maximum-page guard
+- Converts JSON objects into typed Kafka Connect `Struct` values (primitive scalar types are retained; nested objects/arrays are compact JSON strings), enabling schema-aware converters such as AvroConverter
 - Stable record IDs emitted as Kafka Connect source offsets
 - Reads the saved source offset on task startup and filters out IDs at or below the last committed ID (numeric comparison when possible, lexical otherwise)
 - Optional `rest.incremental.cursor.parameter` sends the last committed ID to APIs that accept a query cursor
@@ -104,14 +105,17 @@ The local password is demonstrative and must never be reused in a deployed envir
 - [x] Stable ascending-ID checkpoint filtering and optional query cursor parameter
 - [ ] Opaque API cursors, next-page tokens and strict ordering guarantees
 - [x] MySQL Testcontainers sink-task integration tests
-- [ ] Kafka/Schema Registry/Kafka Connect-to-MySQL end-to-end tests
+- [x] Docker Compose end-to-end test harness for REST → Kafka/Avro/Schema Registry → MySQL, including worker restart
+- [ ] Obtain a successful CI run and extend the harness with database-outage and rebalance fault injection
 - [x] Additive nullable-column schema evolution policy
 - [ ] Broader database dialect coverage and schema-evolution fault tests
 - [x] ErrantRecordReporter-based malformed-record reporting
-- [ ] Validate JMX exporter mappings and dashboard metrics against a live stack
-- [ ] Fault-injection tests for task restart, rebalance, DB outage and recovery
+- [x] Explicit JMX exporter mappings and Grafana panels for toolkit records, retries, failures, DLQ routing and last-success time
+- [ ] Validate metric scrape and dashboard queries against a live stack
+- [x] Connect worker restart exercised by the end-to-end smoke test (pending CI validation)
+- [ ] Fault-injection tests for task rebalance and database outage/recovery
 
 ## Verification
-Run `mvn --batch-mode verify`. CI status is shown by the badge above. Infrastructure and connector runtime behavior must be validated with Docker-based integration tests before claiming production readiness.
+Run `mvn --batch-mode verify` for unit and database integration tests. Run `docker compose up -d` followed by `bash scripts/e2e-smoke.sh` for the REST-to-MySQL runtime path and Connect worker restart. CI runs both jobs. Infrastructure and connector runtime behavior must pass in a live Docker environment before claiming production readiness.
 
 See [Operations](docs/operations.md), [Architecture](docs/architecture.md) and [Contributing](CONTRIBUTING.md).
