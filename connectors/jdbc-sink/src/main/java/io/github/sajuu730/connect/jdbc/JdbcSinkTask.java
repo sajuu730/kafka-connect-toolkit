@@ -31,6 +31,8 @@ public final class JdbcSinkTask extends SinkTask {
     private String password;
     private String table;
     private int batchSize;
+    private String insertMode;
+    private List<String> primaryKeyFields;
     private RetryPolicy retryPolicy;
     private TaskMetrics metrics;
     private List<String> columns = List.of();
@@ -42,9 +44,12 @@ public final class JdbcSinkTask extends SinkTask {
         table = required(props, JdbcSinkConnector.TABLE);
         if (!IDENTIFIER.matcher(table).matches()) throw new ConnectException("Unsafe table.name; use a simple SQL identifier or schema.table");
         batchSize = Integer.parseInt(props.getOrDefault(JdbcSinkConnector.BATCH_SIZE, "500"));
+        insertMode = props.getOrDefault(JdbcSinkConnector.INSERT_MODE, "insert");
+        primaryKeyFields = java.util.Arrays.stream(props.getOrDefault(JdbcSinkConnector.PK_FIELDS, "").split(","))
+            .map(String::trim).filter(value -> !value.isEmpty()).distinct().toList();
         int attempts = Integer.parseInt(props.getOrDefault("retry.max.attempts", "3"));
         long initialBackoff = Long.parseLong(props.getOrDefault("retry.initial.backoff.ms", "500"));
-        if (batchSize < 1 || attempts < 1 || initialBackoff < 0)
+        if (batchSize < 1 || attempts < 1 || initialBackoff < 0 || !List.of("insert", "upsert").contains(insertMode))
             throw new ConnectException("Invalid JDBC batch or retry configuration");
         retryPolicy = new RetryPolicy(attempts, Duration.ofMillis(initialBackoff), Duration.ofSeconds(30), 0.2);
         openConnection();
@@ -94,9 +99,7 @@ public final class JdbcSinkTask extends SinkTask {
     }
 
     private void executeBatch(Collection<SinkRecord> records) throws SQLException {
-        String sql = "INSERT INTO " + quoteQualified(table) + " (" +
-            columns.stream().map(JdbcSinkTask::quote).collect(Collectors.joining(",")) +
-            ") VALUES (" + String.join(",", java.util.Collections.nCopies(columns.size(), "?")) + ")";
+        String sql = buildInsertSql();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             int pending = 0;
             for (SinkRecord record : records) {
@@ -107,6 +110,24 @@ public final class JdbcSinkTask extends SinkTask {
             }
             if (pending % batchSize != 0) statement.executeBatch();
         }
+    }
+
+    private String buildInsertSql() {
+        String sql = "INSERT INTO " + quoteQualified(table) + " (" +
+            columns.stream().map(JdbcSinkTask::quote).collect(Collectors.joining(",")) +
+            ") VALUES (" + String.join(",", java.util.Collections.nCopies(columns.size(), "?")) + ")";
+        if ("insert".equals(insertMode)) return sql;
+        if (primaryKeyFields.isEmpty())
+            throw new ConnectException("pk.fields must be configured when insert.mode=upsert");
+        if (!columns.containsAll(primaryKeyFields))
+            throw new ConnectException("Every pk.fields entry must exist in the incoming Struct schema");
+        String conflictKeys = primaryKeyFields.stream().map(JdbcSinkTask::quote).collect(Collectors.joining(","));
+        List<String> updateColumns = columns.stream().filter(column -> !primaryKeyFields.contains(column)).toList();
+        if (updateColumns.isEmpty()) return sql + " ON CONFLICT (" + conflictKeys + ") DO NOTHING";
+        String updates = updateColumns.stream()
+            .map(column -> quote(column) + "=EXCLUDED." + quote(column))
+            .collect(Collectors.joining(","));
+        return sql + " ON CONFLICT (" + conflictKeys + ") DO UPDATE SET " + updates;
     }
 
     private void openConnection() {
