@@ -72,4 +72,4 @@ Do not deploy the local Compose credentials or plaintext listeners to production
 
 ## Observability
 
-Kafka Connect exposes worker and connector/task metrics through its runtime metrics system and JMX when enabled. Monitor task state, source record poll rates, sink record write rates, error rates, task restarts, DLQ volume, JDBC connection health, and database latency. Connector-specific custom metrics and structured application logging are planned work, not yet implemented.
+Kafka Connect exposes worker and connector/task metrics through its runtime metrics system. In addition, each toolkit task registers a per-instance JMX MBean under the domain `io.github.sajuu730.connect` with counters for `RecordsProcessed`, `BatchesCompleted`, `Requests`, `Retries`, `Failures`, and `LastSuccessTimeEpochMs`. The MBean is unregistered when the task stops. If JMX registration fails, the connector continues and logs a warning. Monitor task state, source record poll rates, sink record write rates, error rates, task restarts, DLQ volume, JDBC connection health, and database latency. Structured diagnostic logging and operational dashboards remain planned work.
