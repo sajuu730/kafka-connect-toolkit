@@ -16,6 +16,7 @@ public final class TaskMetrics implements TaskMetricsMBean, AutoCloseable {
     private final AtomicLong requests = new AtomicLong();
     private final AtomicLong retries = new AtomicLong();
     private final AtomicLong failures = new AtomicLong();
+    private final AtomicLong dlqRecordsRouted = new AtomicLong();
     private final AtomicLong lastSuccessTimeEpochMs = new AtomicLong();
     private final MBeanServer server = ManagementFactory.getPlatformMBeanServer();
     private ObjectName objectName;
@@ -34,6 +35,7 @@ public final class TaskMetrics implements TaskMetricsMBean, AutoCloseable {
     public void request() { requests.incrementAndGet(); }
     public void retry() { retries.incrementAndGet(); }
     public void failure() { failures.incrementAndGet(); }
+    public void dlqRecordRouted() { dlqRecordsRouted.incrementAndGet(); }
     public void processed(long count) {
         recordsProcessed.addAndGet(count);
         lastSuccessTimeEpochMs.set(System.currentTimeMillis());
@@ -48,6 +50,7 @@ public final class TaskMetrics implements TaskMetricsMBean, AutoCloseable {
     @Override public long getRequests() { return requests.get(); }
     @Override public long getRetries() { return retries.get(); }
     @Override public long getFailures() { return failures.get(); }
+    @Override public long getDlqRecordsRouted() { return dlqRecordsRouted.get(); }
     @Override public long getLastSuccessTimeEpochMs() { return lastSuccessTimeEpochMs.get(); }
 
     @Override public void close() {
