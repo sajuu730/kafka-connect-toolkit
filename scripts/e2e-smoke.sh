@@ -79,4 +79,4 @@ wait_for "connectors RUNNING after worker restart" "connector_tasks_running kct-
 wait_for "source offset survives Connect restart" "curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connectors/kct-e2e-source/offsets' | grep -q 'e2e-1'"
 wait_for "both records remain in MySQL after restart" "docker exec '$MYSQL_CONTAINER' mysql -N -u'$MYSQL_USER' -p'$MYSQL_PASSWORD' '$MYSQL_DATABASE' -e \"SELECT COUNT(*) FROM events WHERE id IN ('e2e-1','e2e-2')\" | grep -q '^2$'"
 
-echo "E2E smoke test passed: REST -> Kafka/Avro/Schema Registry -> MySQL, offset persistence, worker rebalance, MySQL outage recovery, JMX, Prometheus and Grafana."
+echo "E2E smoke test passed: REST -> Kafka/Avro/Schema Registry -> MySQL, DLQ routing, offset persistence, worker rebalance, MySQL outage recovery, JMX, Prometheus and Grafana."
