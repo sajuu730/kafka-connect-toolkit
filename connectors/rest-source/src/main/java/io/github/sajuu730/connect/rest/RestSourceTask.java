@@ -110,7 +110,7 @@ public final class RestSourceTask extends SourceTask {
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                 int status = response.statusCode();
                 if (status >= 200 && status < 300) return response;
-                if (status < 500 && status != 429)
+                if (status < 500 && status != 429 && status != 408)
                     throw new ConnectException("REST endpoint returned non-retryable HTTP " + status);
                 lastFailure = new IOException("Retryable REST response: HTTP " + status);
             } catch (ConnectException ex) {
