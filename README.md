@@ -26,10 +26,11 @@ A Java-based toolkit for operating two reusable Kafka Connect integrations: an H
 - Writes Kafka Connect `Struct` values to a relational table
 - Uses prepared statements for record values and validates/quotes table identifiers
 - Executes bounded JDBC batches within a transaction per `put` call
+- Supports PostgreSQL `ON CONFLICT` upserts with explicit `pk.fields`
 - Rolls back failed batches and retries transient SQL execution failures with capped exponential backoff
 - Treats commit failures as ambiguous and delegates recovery to Kafka Connect's task retry behavior
 
-**Current limitations:** INSERT-only; no upsert, schema evolution, deletes, or automatic table creation. The destination table must already exist and match the incoming Struct fields. At-least-once replay can create duplicate-key failures unless the target schema and upstream processing are designed for idempotency.
+**Current limitations:** upsert mode uses PostgreSQL `ON CONFLICT` syntax and is PostgreSQL-specific; schema evolution, deletes, and automatic table creation are not implemented. The destination table must already exist and match the incoming Struct fields. At-least-once replay can create duplicate-key failures unless the target schema and upstream processing are designed for idempotency.
 
 ### Shared engineering
 
@@ -133,6 +134,8 @@ The local Compose environment creates `public.events`. Configure the sink with a
     "connection.user": "connect",
     "connection.password": "REPLACE_WITH_LOCAL_PASSWORD",
     "table.name": "public.events",
+    "insert.mode": "upsert",
+    "pk.fields": "id",
     "batch.size": "500",
     "retry.max.attempts": "3",
     "retry.initial.backoff.ms": "500"
@@ -173,7 +176,8 @@ CI runs this command on pushes and pull requests to `main`. Integration tests ag
 - [x] Add Docker Compose development environment and worker DLQ configuration
 - [x] Add REST bearer authentication and bounded page-number pagination
 - [ ] Add REST incremental cursor strategies
-- [ ] Add configurable JDBC upsert and schema evolution
+- [x] Add configurable PostgreSQL JDBC upsert by primary-key fields
+- [ ] Add schema evolution
 - [x] Add a PostgreSQL service-backed integration test for JDBC sink writes
 - [ ] Add end-to-end tests against a running Kafka Connect worker and PostgreSQL
 - [x] Add per-task JMX counters and lifecycle cleanup
