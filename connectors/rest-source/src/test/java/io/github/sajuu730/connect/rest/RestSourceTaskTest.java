@@ -2,6 +2,7 @@ package io.github.sajuu730.connect.rest;
 
 import com.sun.net.httpserver.HttpServer;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.source.SourceTaskContext;
 import org.apache.kafka.connect.storage.OffsetStorageReader;
 import org.junit.jupiter.api.AfterEach;
@@ -45,7 +46,10 @@ class RestSourceTaskTest {
         assertEquals(2, records.size());
         assertEquals(Map.of("id", "a"), records.get(0).sourceOffset());
         assertEquals(Map.of("id", "b"), records.get(1).sourceOffset());
-        assertEquals("{\"id\":\"a\",\"type\":\"created\"}", records.get(0).value());
+        Struct firstValue = (Struct) records.get(0).value();
+        assertEquals("a", firstValue.getString("id"));
+        assertEquals("created", firstValue.getString("type"));
+        assertEquals(org.apache.kafka.connect.data.Schema.Type.STRING, records.get(0).valueSchema().field("type").schema().type());
         task.commitRecord(records.get(0), null);
         List<SourceRecord> afterAcknowledgement = task.poll();
         assertEquals(1, afterAcknowledgement.size());
