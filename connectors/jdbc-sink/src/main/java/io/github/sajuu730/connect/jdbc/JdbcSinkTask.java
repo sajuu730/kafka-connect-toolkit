@@ -118,6 +118,7 @@ public final class JdbcSinkTask extends SinkTask {
         }
         try {
             errantRecordReporter.report(record, failure).get();
+            if (metrics != null) metrics.dlqRecordRouted();
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new ConnectException("Interrupted while reporting malformed record to the DLQ", interrupted);
