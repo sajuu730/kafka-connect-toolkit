@@ -29,6 +29,7 @@ public final class RestSourceTask extends SourceTask {
     private String lastEmittedId;
 
     @Override public void start(Map<String, String> props) {
+        lastEmittedId = null;
         endpoint = required(props, RestSourceConnector.ENDPOINT);
         topic = required(props, RestSourceConnector.TOPIC);
         idField = props.getOrDefault(RestSourceConnector.ID_FIELD, "id");
@@ -62,7 +63,6 @@ public final class RestSourceTask extends SourceTask {
             Map<String, ?> partition = Map.of("endpoint", endpoint);
             List<SourceRecord> records = new ArrayList<>();
             boolean resumeFound = lastEmittedId == null;
-            String newestId = lastEmittedId;
             for (JsonNode row : rows) {
                 if (!row.isObject()) throw new ConnectException("Every REST response record must be a JSON object");
                 JsonNode id = row.get(idField);
@@ -74,7 +74,6 @@ public final class RestSourceTask extends SourceTask {
                 }
                 records.add(new SourceRecord(partition, Map.of("id", idValue), topic,
                     org.apache.kafka.connect.data.Schema.STRING_SCHEMA, JSON.writeValueAsString(row)));
-                newestId = idValue;
             }
             // If the API no longer contains the saved offset, replay the current snapshot rather than silently dropping it.
             if (!resumeFound && lastEmittedId != null) {
@@ -82,11 +81,9 @@ public final class RestSourceTask extends SourceTask {
                     String idValue = row.path(idField).asText();
                     records.add(new SourceRecord(partition, Map.of("id", idValue), topic,
                         org.apache.kafka.connect.data.Schema.STRING_SCHEMA, JSON.writeValueAsString(row)));
-                    newestId = idValue;
                 }
             }
-            if (!records.isEmpty()) lastEmittedId = newestId;
-            else sleepWhileRunning(pollIntervalMs);
+            if (records.isEmpty()) sleepWhileRunning(pollIntervalMs);
             return records;
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
@@ -125,7 +122,18 @@ public final class RestSourceTask extends SourceTask {
     }
 
     private void sleepWhileRunning(long millis) throws InterruptedException {
-        if (millis > 0 && running) Thread.sleep(millis);
+        long deadline = System.nanoTime() + Duration.ofMillis(millis).toNanos();
+        while (running && millis > 0) {
+            long remaining = deadline - System.nanoTime();
+            if (remaining <= 0) break;
+            long slice = Math.max(1, Math.min(250, Duration.ofNanos(remaining).toMillis()));
+            Thread.sleep(slice);
+        }
+    }
+
+    @Override public void commitRecord(SourceRecord record, org.apache.kafka.clients.producer.RecordMetadata metadata) {
+        Object committedId = record.sourceOffset().get("id");
+        if (committedId != null) lastEmittedId = committedId.toString();
     }
 
     @Override public void stop() { running = false; }
