@@ -1,6 +1,7 @@
 package io.github.sajuu730.connect.jdbc;
 
 import io.github.sajuu730.connect.common.RetryPolicy;
+import io.github.sajuu730.connect.common.TaskMetrics;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -28,6 +29,7 @@ public final class JdbcSinkTask extends SinkTask {
     private String table;
     private int batchSize;
     private RetryPolicy retryPolicy;
+    private TaskMetrics metrics;
     private List<String> columns = List.of();
 
     @Override public void start(Map<String, String> props) {
@@ -43,6 +45,7 @@ public final class JdbcSinkTask extends SinkTask {
             throw new ConnectException("Invalid JDBC batch or retry configuration");
         retryPolicy = new RetryPolicy(attempts, Duration.ofMillis(initialBackoff), Duration.ofSeconds(30), 0.2);
         openConnection();
+        metrics = new TaskMetrics("jdbc-sink");
     }
 
     @Override public void put(Collection<SinkRecord> records) {
@@ -61,17 +64,23 @@ public final class JdbcSinkTask extends SinkTask {
                 executeBatch(records);
             } catch (SQLException ex) {
                 rollbackQuietly(ex);
-                if (!isRetryable(ex) || attempt == retryPolicy.maxAttempts())
+                if (!isRetryable(ex) || attempt == retryPolicy.maxAttempts()) {
+                    metrics.failure();
                     throw new ConnectException("JDBC batch execution failed after " + attempt + " attempt(s)", ex);
+                }
+                metrics.retry();
                 reconnect();
                 sleepBeforeRetry(attempt);
                 continue;
             }
             try {
                 connection.commit();
+                metrics.batchCompleted();
+                metrics.processed(records.size());
                 return;
             } catch (SQLException ex) {
                 rollbackQuietly(ex);
+                metrics.failure();
                 // Commit outcome can be ambiguous after a network failure; let the Connect worker retry the task.
                 throw new ConnectException("JDBC commit failed; outcome may be ambiguous", ex);
             }
@@ -130,6 +139,7 @@ public final class JdbcSinkTask extends SinkTask {
     @Override public void stop() {
         if (connection != null) try { connection.close(); }
         catch (SQLException ex) { throw new ConnectException("Failed to close JDBC connection", ex); }
+        finally { if (metrics != null) metrics.close(); }
     }
     @Override public String version() { return "0.1.0-SNAPSHOT"; }
 
