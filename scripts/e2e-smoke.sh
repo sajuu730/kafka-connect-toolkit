@@ -2,7 +2,7 @@
 set -euo pipefail
 
 CONNECT_URL="${CONNECT_URL:-http://localhost:8083}"
-MYSQL_CONTAINER="${MYSQL_CONTAINER:-kafka-connect-toolkit-mysql-1}"
+MYSQL_CONTAINER="${MYSQL_CONTAINER:-$(docker compose ps -q mysql)}"
 MYSQL_USER="${MYSQL_USER:-connect}"
 MYSQL_PASSWORD="${MYSQL_PASSWORD:-connect_local_only}"
 MYSQL_DATABASE="${MYSQL_DATABASE:-connect_demo}"
