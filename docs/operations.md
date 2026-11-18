@@ -27,13 +27,14 @@ docker compose restart connect
 | `rest.endpoint` | required | HTTP endpoint returning a JSON object or array |
 | `kafka.topic` | required | Destination topic |
 | `record.id.field` | `id` | Stable identifier field used as the source offset |
+| `rest.auth.bearer.token` | empty | Optional bearer token; use a secret/config provider in production |
 | `poll.interval.ms` | `5000` | Delay when no new records are available; minimum 100 ms |
 | `retry.max.attempts` | `3` | Total attempts for a request |
 | `retry.initial.backoff.ms` | `500` | Initial capped exponential retry delay |
 
 Requests have a 10-second connection timeout and 30-second request timeout. HTTP 429, 5xx, and I/O failures are retried; other non-2xx responses fail immediately. Backoff is capped at 30 seconds and includes jitter.
 
-The endpoint must return objects with unique, stable IDs in deterministic order. The source task resumes after the last stored ID if it is still present in the snapshot. If it is absent, the task replays the current snapshot. This connector does not yet support authentication, pagination, rate-limit headers, or server-side incremental cursors. The source task emits JSON text using a Kafka Connect string schema.
+The endpoint must return objects with unique, stable IDs in deterministic order. The optional bearer token is sent in the HTTP Authorization header and is never written to application logs. The source task resumes after the last stored ID if it is still present in the snapshot. If it is absent, the task replays the current snapshot. This connector does not yet support authentication, pagination, rate-limit headers, or server-side incremental cursors. The source task emits JSON text using a Kafka Connect string schema.
 
 ## JDBC sink configuration
 
