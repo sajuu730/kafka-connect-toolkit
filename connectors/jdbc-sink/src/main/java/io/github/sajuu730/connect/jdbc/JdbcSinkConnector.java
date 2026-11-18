@@ -20,7 +20,7 @@ public final class JdbcSinkConnector extends SinkConnector {
         .define(TABLE, ConfigDef.Type.STRING, ConfigDef.Importance.HIGH, "Target table (optionally schema-qualified)")
         .define(BATCH_SIZE, ConfigDef.Type.INT, 500, ConfigDef.Range.between(1, 10000), ConfigDef.Importance.MEDIUM, "Maximum records per JDBC batch")
         .define("retry.max.attempts", ConfigDef.Type.INT, 3, ConfigDef.Range.between(1, 10), ConfigDef.Importance.MEDIUM, "Maximum retries for transient SQL failures")
-        .define("retry.initial.backoff.ms", ConfigDef.Type.LONG, 500L, ConfigDef.Range.atLeast(0L), ConfigDef.Importance.LOW, "Initial retry backoff in milliseconds");
+        .define("retry.initial.backoff.ms", ConfigDef.Type.LONG, 500L, ConfigDef.Range.between(0L, 30000L), ConfigDef.Importance.LOW, "Initial retry backoff in milliseconds");
 
     private Map<String, String> taskProps;
     @Override public void start(Map<String, String> props) {
