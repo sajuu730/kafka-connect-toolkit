@@ -19,7 +19,7 @@ public final class RestSourceConnector extends SourceConnector {
         .define(ENDPOINT, ConfigDef.Type.STRING, ConfigDef.Importance.HIGH, "HTTP endpoint returning a JSON array or object")
         .define(TOPIC, ConfigDef.Type.STRING, ConfigDef.Importance.HIGH, "Kafka topic for emitted records")
         .define(ID_FIELD, ConfigDef.Type.STRING, "id", ConfigDef.Importance.MEDIUM, "Stable JSON field used as the source offset")
-        .define(POLL_INTERVAL, ConfigDef.Type.INT, 5000, ConfigDef.Range.atLeast(100), ConfigDef.Importance.LOW, "Delay between polls in milliseconds")
+        .define(POLL_INTERVAL, ConfigDef.Type.INT, 5000, ConfigDef.Range.between(100, 300000), ConfigDef.Importance.LOW, "Delay between polls in milliseconds")
         .define(MAX_ATTEMPTS, ConfigDef.Type.INT, 3, ConfigDef.Range.between(1, 10), ConfigDef.Importance.MEDIUM, "Maximum HTTP attempts per poll")
         .define(INITIAL_BACKOFF, ConfigDef.Type.LONG, 500L, ConfigDef.Range.between(0L, 30000L), ConfigDef.Importance.LOW, "Initial retry backoff in milliseconds")
         .define(BEARER_TOKEN, ConfigDef.Type.PASSWORD, "", ConfigDef.Importance.MEDIUM, "Optional bearer token; never log this value");
