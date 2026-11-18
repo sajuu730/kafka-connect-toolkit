@@ -119,6 +119,8 @@ public final class JdbcSinkTask extends SinkTask {
         try {
             errantRecordReporter.report(record, failure).get();
             if (metrics != null) metrics.dlqRecordRouted();
+            LOG.log(Level.INFO, "Routed malformed record to DLQ: topic={0}, partition={1}, offset={2}",
+                    new Object[]{record.topic(), record.kafkaPartition(), record.kafkaOffset()});
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new ConnectException("Interrupted while reporting malformed record to the DLQ", interrupted);
