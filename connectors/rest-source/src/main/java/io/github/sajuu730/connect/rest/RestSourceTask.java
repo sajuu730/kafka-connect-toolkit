@@ -13,6 +13,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -150,6 +154,7 @@ public final class RestSourceTask extends SourceTask {
     private HttpResponse<String> fetchWithRetry(String requestUri) throws InterruptedException {
         Exception lastFailure = null;
         for (int attempt = 1; attempt <= retryPolicy.maxAttempts() && running; attempt++) {
+            long retryAfterMillis = -1L;
             try {
                 var builder = HttpRequest.newBuilder(URI.create(requestUri))
                     .timeout(Duration.ofSeconds(30)).header("Accept", "application/json");
@@ -163,6 +168,9 @@ public final class RestSourceTask extends SourceTask {
                 if (status < 500 && status != 429 && status != 408)
                     throw new ConnectException("REST endpoint returned non-retryable HTTP " + status);
                 lastFailure = new IOException("Retryable REST response: HTTP " + status);
+                if (status == 429 || status == 503) {
+                    retryAfterMillis = parseRetryAfterMillis(response.headers().firstValue("Retry-After").orElse(null));
+                }
             } catch (ConnectException ex) {
                 throw ex;
             } catch (IOException ex) {
@@ -172,11 +180,35 @@ public final class RestSourceTask extends SourceTask {
                 metrics.retry();
                 LOG.log(Level.WARNING, "Transient REST request failure; retrying attempt {0}/{1}",
                     new Object[]{attempt, retryPolicy.maxAttempts()});
-                sleepWhileRunning(retryPolicy.delayBeforeAttempt(attempt).toMillis());
+                long backoff = retryPolicy.delayBeforeAttempt(attempt).toMillis();
+                sleepWhileRunning(retryAfterMillis >= 0 ? retryAfterMillis : backoff);
             }
         }
         if (!running) throw new ConnectException("REST source task stopped during request");
         throw new ConnectException("REST request failed after " + retryPolicy.maxAttempts() + " attempts", lastFailure);
+    }
+
+    /**
+     * Parses both legal Retry-After forms: delta-seconds and an HTTP-date.
+     * Invalid or absent values fall back to the connector's exponential backoff.
+     * The five-minute ceiling prevents a remote server from suspending a task
+     * indefinitely through an unexpectedly large header.
+     */
+    static long parseRetryAfterMillis(String value) {
+        if (value == null || value.isBlank()) return -1L;
+        try {
+            long seconds = Long.parseLong(value.trim());
+            if (seconds < 0) return -1L;
+            return Math.min(Duration.ofSeconds(seconds).toMillis(), Duration.ofMinutes(5).toMillis());
+        } catch (NumberFormatException ignored) {
+            try {
+                Instant retryAt = ZonedDateTime.parse(value.trim(), DateTimeFormatter.RFC_1123_DATE_TIME).toInstant();
+                long delay = Math.max(0L, Duration.between(Instant.now(), retryAt).toMillis());
+                return Math.min(delay, Duration.ofMinutes(5).toMillis());
+            } catch (DateTimeParseException invalidDate) {
+                return -1L;
+            }
+        }
     }
 
     private void sleepWhileRunning(long millis) throws InterruptedException {
