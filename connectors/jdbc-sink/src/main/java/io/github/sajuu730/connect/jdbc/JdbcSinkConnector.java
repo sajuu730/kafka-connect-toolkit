@@ -18,14 +18,18 @@ public final class JdbcSinkConnector extends SinkConnector {
         .define(USER, ConfigDef.Type.STRING, "", ConfigDef.Importance.MEDIUM, "Database username")
         .define(PASSWORD, ConfigDef.Type.PASSWORD, ConfigDef.Importance.HIGH, "Database password")
         .define(TABLE, ConfigDef.Type.STRING, ConfigDef.Importance.HIGH, "Target table (optionally schema-qualified)")
-        .define(BATCH_SIZE, ConfigDef.Type.INT, 500, ConfigDef.Range.between(1, 10000), ConfigDef.Importance.MEDIUM, "Maximum records per JDBC batch");
+        .define(BATCH_SIZE, ConfigDef.Type.INT, 500, ConfigDef.Range.between(1, 10000), ConfigDef.Importance.MEDIUM, "Maximum records per JDBC batch")
+        .define("retry.max.attempts", ConfigDef.Type.INT, 3, ConfigDef.Range.between(1, 10), ConfigDef.Importance.MEDIUM, "Maximum retries for transient SQL failures")
+        .define("retry.initial.backoff.ms", ConfigDef.Type.LONG, 500L, ConfigDef.Range.atLeast(0L), ConfigDef.Importance.LOW, "Initial retry backoff in milliseconds");
 
     private Map<String, String> taskProps;
     @Override public void start(Map<String, String> props) {
         Map<String, Object> parsed = CONFIG.parse(props);
         Password password = (Password) parsed.get(PASSWORD);
         taskProps = Map.of(URL, (String) parsed.get(URL), USER, (String) parsed.get(USER),
-            PASSWORD, password.value(), TABLE, (String) parsed.get(TABLE), BATCH_SIZE, parsed.get(BATCH_SIZE).toString());
+            PASSWORD, password.value(), TABLE, (String) parsed.get(TABLE), BATCH_SIZE, parsed.get(BATCH_SIZE).toString(),
+            "retry.max.attempts", parsed.get("retry.max.attempts").toString(),
+            "retry.initial.backoff.ms", parsed.get("retry.initial.backoff.ms").toString());
     }
     @Override public Class<? extends Task> taskClass() { return JdbcSinkTask.class; }
     @Override public List<Map<String, String>> taskConfigs(int maxTasks) {
