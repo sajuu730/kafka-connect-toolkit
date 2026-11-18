@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS events (
+    id          VARCHAR(128) NOT NULL PRIMARY KEY,
+    event_type  VARCHAR(128) NOT NULL,
+    payload     JSON NULL,
+    created_at  TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+);
