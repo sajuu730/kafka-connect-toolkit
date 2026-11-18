@@ -1,0 +1,27 @@
+groups:
+  - name: kafka-connect-toolkit
+    rules:
+      - alert: KctTaskFailures
+        expr: increase(kct_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Kafka Connect Toolkit task failures detected
+          description: A toolkit connector task recorded one or more failures in the last five minutes.
+      - alert: KctDlqRecordsRouted
+        expr: increase(kct_dlq_records_routed_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: Kafka Connect Toolkit routed records to the DLQ
+          description: One or more malformed records were routed to the configured dead-letter topic.
+      - alert: KctSinkLagHigh
+        expr: kafka_connect_connector_task_sink_record_lag_max > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Kafka Connect sink lag is high
+          description: A sink task has more than 1000 records of consumer lag for at least five minutes.
