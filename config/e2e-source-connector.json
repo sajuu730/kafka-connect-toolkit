@@ -1,0 +1,9 @@
+{
+  "connector.class": "io.github.sajuu730.connect.rest.RestSourceConnector",
+  "tasks.max": "1",
+  "rest.endpoint": "http://mock-api:1080/events",
+  "kafka.topic": "kct-e2e-events",
+  "poll.interval.ms": "500",
+  "retry.max.attempts": "3",
+  "retry.initial.backoff.ms": "100"
+}
