@@ -57,7 +57,7 @@ public final class RestSourceTask extends SourceTask {
     }
 
     @Override public List<SourceRecord> poll() throws InterruptedException {
-        if (!running) return null;
+        if (!running) return List.of();
         try {
             HttpResponse<String> response = fetchWithRetry();
             JsonNode root = JSON.readTree(response.body());
