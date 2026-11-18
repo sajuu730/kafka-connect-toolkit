@@ -86,8 +86,8 @@ public final class RestSourceTask extends SourceTask {
                 if (id == null || id.isNull()) throw new ConnectException("Response record is missing stable id field: " + idField);
                 String idValue = id.asText();
                 if (lastEmittedId != null && compareCursor(idValue, lastEmittedId) <= 0) continue;
-                records.add(new SourceRecord(partition, Map.of("id", idValue), topic,
-                    toConnectStruct(row).schema(), toConnectStruct(row)));
+                Struct value = toConnectStruct(row);
+                records.add(new SourceRecord(partition, Map.of("id", idValue), topic, value.schema(), value));
             }
             if (records.isEmpty()) sleepWhileRunning(pollIntervalMs);
             return records;
