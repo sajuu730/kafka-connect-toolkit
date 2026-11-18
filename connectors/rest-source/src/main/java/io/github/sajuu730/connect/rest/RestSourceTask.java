@@ -7,6 +7,9 @@ import io.github.sajuu730.connect.common.TaskMetrics;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.source.SourceTask;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Struct;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -84,7 +87,7 @@ public final class RestSourceTask extends SourceTask {
                 String idValue = id.asText();
                 if (lastEmittedId != null && compareCursor(idValue, lastEmittedId) <= 0) continue;
                 records.add(new SourceRecord(partition, Map.of("id", idValue), topic,
-                    org.apache.kafka.connect.data.Schema.STRING_SCHEMA, JSON.writeValueAsString(row)));
+                    toConnectStruct(row).schema(), toConnectStruct(row)));
             }
             if (records.isEmpty()) sleepWhileRunning(pollIntervalMs);
             return records;
@@ -98,6 +101,46 @@ public final class RestSourceTask extends SourceTask {
             if (metrics != null) metrics.failure();
             throw new ConnectException("REST source poll failed", ex);
         }
+    }
+
+    /**
+     * Converts a JSON object into a Connect Struct so schema-aware converters
+     * (including AvroConverter) can serialize it for downstream sink connectors.
+     * Nested JSON values are retained as compact JSON strings; scalar fields keep
+     * their natural Connect primitive types.
+     */
+    private static Struct toConnectStruct(JsonNode row) throws IOException {
+        SchemaBuilder builder = SchemaBuilder.struct();
+        Map<String, Schema> fieldSchemas = new java.util.LinkedHashMap<>();
+        var fields = row.fields();
+        while (fields.hasNext()) {
+            var entry = fields.next();
+            JsonNode value = entry.getValue();
+            Schema fieldSchema;
+            if (value == null || value.isNull()) fieldSchema = Schema.OPTIONAL_STRING_SCHEMA;
+            else if (value.isBoolean()) fieldSchema = Schema.BOOLEAN_SCHEMA;
+            else if (value.isIntegralNumber() && value.canConvertToInt()) fieldSchema = Schema.INT32_SCHEMA;
+            else if (value.isIntegralNumber() && value.canConvertToLong()) fieldSchema = Schema.INT64_SCHEMA;
+            else if (value.isNumber()) fieldSchema = Schema.FLOAT64_SCHEMA;
+            else fieldSchema = Schema.STRING_SCHEMA;
+            fieldSchemas.put(entry.getKey(), fieldSchema);
+            builder.field(entry.getKey(), fieldSchema);
+        }
+        Schema schema = builder.build();
+        Struct struct = new Struct(schema);
+        for (Map.Entry<String, Schema> entry : fieldSchemas.entrySet()) {
+            JsonNode value = row.get(entry.getKey());
+            Object converted;
+            if (value == null || value.isNull()) converted = null;
+            else if (value.isBoolean()) converted = value.booleanValue();
+            else if (entry.getValue().type() == Schema.Type.INT32) converted = value.intValue();
+            else if (entry.getValue().type() == Schema.Type.INT64) converted = value.longValue();
+            else if (entry.getValue().type() == Schema.Type.FLOAT64) converted = value.doubleValue();
+            else if (value.isTextual()) converted = value.textValue();
+            else converted = JSON.writeValueAsString(value);
+            struct.put(entry.getKey(), converted);
+        }
+        return struct;
     }
 
     private List<JsonNode> fetchRows() throws InterruptedException, IOException {
