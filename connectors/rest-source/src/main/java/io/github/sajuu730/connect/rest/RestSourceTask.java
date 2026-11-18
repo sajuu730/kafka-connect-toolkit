@@ -16,9 +16,12 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public final class RestSourceTask extends SourceTask {
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final Logger LOG = Logger.getLogger(RestSourceTask.class.getName());
     private HttpClient client;
     private String endpoint;
     private String topic;
@@ -123,6 +126,8 @@ public final class RestSourceTask extends SourceTask {
             }
             if (attempt < retryPolicy.maxAttempts()) {
                 metrics.retry();
+                LOG.log(Level.WARNING, "Transient REST request failure; retrying attempt {0}/{1}",
+                    new Object[]{attempt, retryPolicy.maxAttempts()});
                 sleepWhileRunning(retryPolicy.delayBeforeAttempt(attempt).toMillis());
             }
         }
