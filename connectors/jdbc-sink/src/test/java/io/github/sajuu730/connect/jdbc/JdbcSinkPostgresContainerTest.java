@@ -5,9 +5,6 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.sql.DriverManager;
 import java.util.List;
@@ -15,18 +12,22 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-@Testcontainers(disabledWithoutDocker = true)
-class JdbcSinkPostgresContainerTest {
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES =
-        new PostgreSQLContainer<>("postgres:16-alpine");
-
+class JdbcSinkPostgresIntegrationTest {
     @Test
     void writesConnectStructRecordsToPostgresAndCommitsTransaction() throws Exception {
-        try (var connection = DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        String url = System.getenv("KCT_POSTGRES_TEST_URL");
+        String user = System.getenv("KCT_POSTGRES_TEST_USER");
+        String password = System.getenv("KCT_POSTGRES_TEST_PASSWORD");
+        assumeTrue(url != null && !url.isBlank(),
+            "Set KCT_POSTGRES_TEST_URL to enable the PostgreSQL integration test");
+        assumeTrue(user != null && password != null,
+            "Set KCT_POSTGRES_TEST_USER and KCT_POSTGRES_TEST_PASSWORD");
+
+        try (var connection = DriverManager.getConnection(url, user, password);
              var statement = connection.createStatement()) {
+            statement.execute("DROP TABLE IF EXISTS events");
             statement.execute("""
                 CREATE TABLE events (
                     id VARCHAR(128) PRIMARY KEY,
@@ -44,14 +45,14 @@ class JdbcSinkPostgresContainerTest {
         Struct value = new Struct(schema)
             .put("id", "pg-event-1")
             .put("event_type", "created")
-            .put("payload", "{\"source\":\"testcontainers\"}");
+            .put("payload", "{\"source\":\"postgres-integration\"}");
         SinkRecord record = new SinkRecord("events", 0, null, null, schema, value, 0L);
 
         JdbcSinkTask task = new JdbcSinkTask();
         task.start(Map.of(
-            "connection.url", POSTGRES.getJdbcUrl(),
-            "connection.user", POSTGRES.getUsername(),
-            "connection.password", POSTGRES.getPassword(),
+            "connection.url", url,
+            "connection.user", user,
+            "connection.password", password,
             "table.name", "public.events",
             "batch.size", "100",
             "retry.max.attempts", "2",
@@ -62,15 +63,14 @@ class JdbcSinkPostgresContainerTest {
             task.stop();
         }
 
-        try (var connection = DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        try (var connection = DriverManager.getConnection(url, user, password);
              var statement = connection.prepareStatement(
                 "SELECT event_type, payload FROM events WHERE id = ?")) {
             statement.setString(1, "pg-event-1");
             try (var result = statement.executeQuery()) {
                 assertTrue(result.next());
                 assertEquals("created", result.getString("event_type"));
-                assertEquals("{\"source\":\"testcontainers\"}", result.getString("payload"));
+                assertEquals("{\"source\":\"postgres-integration\"}", result.getString("payload"));
             }
         }
     }
