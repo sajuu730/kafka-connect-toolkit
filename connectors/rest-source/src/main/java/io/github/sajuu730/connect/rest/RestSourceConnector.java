@@ -36,18 +36,18 @@ public final class RestSourceConnector extends SourceConnector {
     @Override public void start(Map<String, String> props) {
         Map<String, Object> parsed = CONFIG.parse(props);
         Password token = (Password) parsed.get(BEARER_TOKEN);
-        this.props = Map.of(
-            ENDPOINT, (String) parsed.get(ENDPOINT),
-            TOPIC, (String) parsed.get(TOPIC),
-            ID_FIELD, (String) parsed.get(ID_FIELD),
-            POLL_INTERVAL, parsed.get(POLL_INTERVAL).toString(),
-            MAX_ATTEMPTS, parsed.get(MAX_ATTEMPTS).toString(),
-            INITIAL_BACKOFF, parsed.get(INITIAL_BACKOFF).toString(),
-            BEARER_TOKEN, token.value(),
-            PAGE_PARAMETER, (String) parsed.get(PAGE_PARAMETER),
-            START_PAGE, parsed.get(START_PAGE).toString(),
-            MAX_PAGES, parsed.get(MAX_PAGES).toString(),
-            CURSOR_PARAMETER, (String) parsed.get(CURSOR_PARAMETER));
+        this.props = Map.ofEntries(
+            Map.entry(ENDPOINT, (String) parsed.get(ENDPOINT)),
+            Map.entry(TOPIC, (String) parsed.get(TOPIC)),
+            Map.entry(ID_FIELD, (String) parsed.get(ID_FIELD)),
+            Map.entry(POLL_INTERVAL, parsed.get(POLL_INTERVAL).toString()),
+            Map.entry(MAX_ATTEMPTS, parsed.get(MAX_ATTEMPTS).toString()),
+            Map.entry(INITIAL_BACKOFF, parsed.get(INITIAL_BACKOFF).toString()),
+            Map.entry(BEARER_TOKEN, token.value()),
+            Map.entry(PAGE_PARAMETER, (String) parsed.get(PAGE_PARAMETER)),
+            Map.entry(START_PAGE, parsed.get(START_PAGE).toString()),
+            Map.entry(MAX_PAGES, parsed.get(MAX_PAGES).toString()),
+            Map.entry(CURSOR_PARAMETER, (String) parsed.get(CURSOR_PARAMETER)));
     }
     @Override public Class<? extends Task> taskClass() { return RestSourceTask.class; }
     @Override public List<Map<String, String>> taskConfigs(int maxTasks) {
