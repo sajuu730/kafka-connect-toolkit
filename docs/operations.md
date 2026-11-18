@@ -48,10 +48,12 @@ When page-number pagination is enabled, the endpoint must return JSON arrays and
 | `connection.password` | required | Database password |
 | `table.name` | required | Target table or schema-qualified table |
 | `batch.size` | `500` | Maximum statements per JDBC execution batch |
+| `insert.mode` | `insert` | `insert` or PostgreSQL-specific `upsert` |
+| `pk.fields` | empty | Comma-separated conflict key fields; required for `upsert` |
 | `retry.max.attempts` | `3` | Attempts for transient SQL execution failures |
 | `retry.initial.backoff.ms` | `500` | Initial capped exponential retry delay |
 
-The sink currently requires `Struct` values and a stable schema across records handled by a task. It uses parameterized INSERT statements and commits a successful `put` call as one transaction. The target table must already exist, and its column names must match the Struct fields.
+The sink currently requires `Struct` values and a stable schema across records handled by a task. With `insert.mode=upsert`, the connector generates PostgreSQL `INSERT ... ON CONFLICT ... DO UPDATE` statements; `pk.fields` must name fields present in the incoming Struct and correspond to a unique or primary-key constraint in the destination table. This mode is PostgreSQL-specific; default `insert` mode uses standard parameterized INSERT statements. It uses parameterized INSERT statements and commits a successful `put` call as one transaction. The target table must already exist, and its column names must match the Struct fields.
 
 Only transient SQL execution failures (including connection and transaction SQLState classes) are retried internally after rollback and reconnect. Commit failures are not retried internally because the server may have committed even if the client lost the response. Kafka Connect will handle task failure/retry according to worker policy. The delivery model is at-least-once; duplicates are possible after task restart or ambiguous commits. Upsert, delete, and schema evolution are not implemented.
 
