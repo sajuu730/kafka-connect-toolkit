@@ -90,12 +90,11 @@ services:
       timeout: 5s
       retries: 20
   jmx-exporter:
-    image: bitnami/jmx-exporter:1.0.1
+    build: ./monitoring/jmx-exporter
     depends_on: [connect]
     ports: ["5556:5556"]
     volumes:
-      - ./monitoring/jmx-config.yml:/opt/bitnami/jmx-exporter/config.yml:ro
-    command: ["0.0.0.0:5556", "/opt/bitnami/jmx-exporter/config.yml"]
+      - ./monitoring/jmx-config.yml:/etc/jmx-exporter/config.yml:ro
   prometheus:
     image: prom/prometheus:v2.55.1
     depends_on: [jmx-exporter]
