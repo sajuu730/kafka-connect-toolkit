@@ -7,12 +7,7 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.SQLRecoverableException;
-import java.sql.SQLTransientException;
+import java.sql.*;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
@@ -26,12 +21,8 @@ public final class JdbcSinkTask extends SinkTask {
     private static final Logger LOG = Logger.getLogger(JdbcSinkTask.class.getName());
     private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?");
     private Connection connection;
-    private String url;
-    private String user;
-    private String password;
-    private String table;
+    private String url, user, password, table, insertMode;
     private int batchSize;
-    private String insertMode;
     private List<String> primaryKeyFields;
     private RetryPolicy retryPolicy;
     private TaskMetrics metrics;
@@ -67,9 +58,8 @@ public final class JdbcSinkTask extends SinkTask {
             if (rowColumns.isEmpty()) throw new ConnectException("JDBC sink cannot insert a Struct with no fields");
             if (columns.isEmpty()) columns = rowColumns;
             if (!columns.equals(rowColumns))
-                throw new ConnectException("Record schema changed within task; use a stable target schema");
+                throw new ConnectException("Record schema changed within task; schema evolution is not enabled for this task");
         }
-
         for (int attempt = 1; attempt <= retryPolicy.maxAttempts(); attempt++) {
             try {
                 executeBatch(records);
@@ -94,15 +84,13 @@ public final class JdbcSinkTask extends SinkTask {
             } catch (SQLException ex) {
                 rollbackQuietly(ex);
                 metrics.failure();
-                // Commit outcome can be ambiguous after a network failure; let the Connect worker retry the task.
                 throw new ConnectException("JDBC commit failed; outcome may be ambiguous", ex);
             }
         }
     }
 
     private void executeBatch(Collection<SinkRecord> records) throws SQLException {
-        String sql = buildInsertSql();
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = connection.prepareStatement(buildInsertSql())) {
             int pending = 0;
             for (SinkRecord record : records) {
                 Struct struct = (Struct) record.value();
@@ -115,48 +103,48 @@ public final class JdbcSinkTask extends SinkTask {
     }
 
     private String buildInsertSql() {
-        String sql = "INSERT INTO " + quoteQualified(table) + " (" +
-            columns.stream().map(JdbcSinkTask::quote).collect(Collectors.joining(",")) +
+        String q = mysql() ? "`" : "\"";
+        String sql = "INSERT INTO " + quoteQualified(table, q) + " (" +
+            columns.stream().map(c -> quote(c, q)).collect(Collectors.joining(",")) +
             ") VALUES (" + String.join(",", java.util.Collections.nCopies(columns.size(), "?")) + ")";
         if ("insert".equals(insertMode)) return sql;
-        if (primaryKeyFields.isEmpty())
-            throw new ConnectException("pk.fields must be configured when insert.mode=upsert");
         if (!columns.containsAll(primaryKeyFields))
             throw new ConnectException("Every pk.fields entry must exist in the incoming Struct schema");
-        String conflictKeys = primaryKeyFields.stream().map(JdbcSinkTask::quote).collect(Collectors.joining(","));
-        List<String> updateColumns = columns.stream().filter(column -> !primaryKeyFields.contains(column)).toList();
-        if (updateColumns.isEmpty()) return sql + " ON CONFLICT (" + conflictKeys + ") DO NOTHING";
-        String updates = updateColumns.stream()
-            .map(column -> quote(column) + "=EXCLUDED." + quote(column))
-            .collect(Collectors.joining(","));
-        return sql + " ON CONFLICT (" + conflictKeys + ") DO UPDATE SET " + updates;
-    }
-
-    private void openConnection() {
-        try {
-            connection = DriverManager.getConnection(url, user, password);
-            connection.setAutoCommit(false);
-        } catch (SQLException ex) {
-            throw new ConnectException("Unable to open JDBC connection", ex);
+        if (mysql()) {
+            List<String> updates = columns.stream().filter(c -> !primaryKeyFields.contains(c)).toList();
+            if (updates.isEmpty()) return sql + " ON DUPLICATE KEY UPDATE " + quote(primaryKeyFields.get(0), q) + "=" + quote(primaryKeyFields.get(0), q);
+            return sql + " ON DUPLICATE KEY UPDATE " + updates.stream()
+                .map(c -> quote(c, q) + "=VALUES(" + quote(c, q) + ")").collect(Collectors.joining(","));
         }
+        String keys = primaryKeyFields.stream().map(c -> quote(c, q)).collect(Collectors.joining(","));
+        List<String> updates = columns.stream().filter(c -> !primaryKeyFields.contains(c)).toList();
+        if (updates.isEmpty()) return sql + " ON CONFLICT (" + keys + ") DO NOTHING";
+        return sql + " ON CONFLICT (" + keys + ") DO UPDATE SET " + updates.stream()
+            .map(c -> quote(c, q) + "=EXCLUDED." + quote(c, q)).collect(Collectors.joining(","));
     }
 
+    private boolean mysql() { return url.startsWith("jdbc:mysql:"); }
+    private static String quoteQualified(String value, String q) {
+        return java.util.Arrays.stream(value.split("\\.")).map(v -> quote(v, q)).collect(Collectors.joining("."));
+    }
+    private static String quote(String identifier, String q) { return q + identifier.replace(q, q + q) + q; }
+    private void openConnection() {
+        try { connection = DriverManager.getConnection(url, user, password); connection.setAutoCommit(false); }
+        catch (SQLException ex) { throw new ConnectException("Unable to open JDBC connection", ex); }
+    }
     private void reconnect() {
         try { if (connection != null) connection.close(); } catch (SQLException ignored) { }
         openConnection();
     }
-
     private void rollbackQuietly(SQLException original) {
         try { if (connection != null) connection.rollback(); }
         catch (SQLException rollback) { original.addSuppressed(rollback); }
     }
-
     private static boolean isRetryable(SQLException ex) {
         String state = ex.getSQLState();
         return ex instanceof SQLTransientException || ex instanceof SQLRecoverableException ||
             (state != null && (state.startsWith("08") || state.startsWith("40")));
     }
-
     private void sleepBeforeRetry(int failedAttempt) {
         try { Thread.sleep(retryPolicy.delayBeforeAttempt(failedAttempt).toMillis()); }
         catch (InterruptedException ex) {
@@ -164,22 +152,12 @@ public final class JdbcSinkTask extends SinkTask {
             throw new ConnectException("Interrupted during JDBC retry backoff", ex);
         }
     }
-
     @Override public void stop() {
-        try {
-            if (connection != null) connection.close();
-        } catch (SQLException ex) {
-            throw new ConnectException("Failed to close JDBC connection", ex);
-        } finally {
-            if (metrics != null) metrics.close();
-        }
+        try { if (connection != null) connection.close(); }
+        catch (SQLException ex) { throw new ConnectException("Failed to close JDBC connection", ex); }
+        finally { if (metrics != null) metrics.close(); }
     }
     @Override public String version() { return "0.1.0-SNAPSHOT"; }
-
-    private static String quoteQualified(String value) {
-        return java.util.Arrays.stream(value.split("\\.")).map(JdbcSinkTask::quote).collect(Collectors.joining("."));
-    }
-    private static String quote(String identifier) { return "\"" + identifier.replace("\"", "\"\"") + "\""; }
     private static String required(Map<String, String> props, String key) {
         String value = props.get(key);
         if (value == null || value.isBlank()) throw new ConnectException("Missing required setting: " + key);
