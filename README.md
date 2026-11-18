@@ -106,7 +106,7 @@ The local password is demonstrative and must never be reused in a deployed envir
 - [ ] Opaque API cursors, next-page tokens and strict ordering guarantees
 - [x] MySQL Testcontainers sink-task integration tests
 - [x] Docker Compose end-to-end test harness for REST → Kafka/Avro/Schema Registry → MySQL and worker restart
-- [x] Expanded harness for MySQL outage/replay, source-offset persistence, second-worker join/leave and monitoring checks (awaiting green CI)
+- [x] Expanded harness for DLQ routing, MySQL outage/replay, source-offset persistence, second-worker join/leave and monitoring checks (awaiting green CI)
 - [x] Additive nullable-column schema evolution policy
 - [ ] Broader database dialect coverage and schema-evolution fault tests
 - [x] ErrantRecordReporter-based malformed-record reporting
