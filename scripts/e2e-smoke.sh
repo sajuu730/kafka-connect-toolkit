@@ -56,6 +56,11 @@ wait_for "source and sink connectors RUNNING" "curl -fsS '$CONNECT_URL/connector
 
 wait_for "record delivered to MySQL" "docker exec '$MYSQL_CONTAINER' mysql -N -u'$MYSQL_USER' -p'$MYSQL_PASSWORD' '$MYSQL_DATABASE' -e \"SELECT id FROM events WHERE id='e2e-1'\" | grep -q '^e2e-1$'"
 
+wait_for "JMX exporter metrics endpoint" "curl -fsS http://localhost:5556/metrics"
+wait_for "toolkit records metric exposed" "curl -fsS http://localhost:5556/metrics | grep -q 'kct_records_processed_total'"
+wait_for "Prometheus scrape target UP" "curl -fsS 'http://localhost:9090/api/v1/query?query=up%7Bjob%3D%22kafka-connect-jmx%22%7D' | grep -q '\\"1\\"'"
+wait_for "Grafana dashboard provisioned" "curl -fsS http://localhost:3000/api/dashboards/uid/kct-overview"
+
 # Force a sink-task failure while MySQL is unavailable, then verify replay after recovery.
 docker compose stop mysql >/dev/null
 curl -fsS -X PUT "$CONNECT_URL/connectors/kct-recovery-source/config" \
