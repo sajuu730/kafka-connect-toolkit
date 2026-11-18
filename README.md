@@ -4,7 +4,7 @@
 
 A Java 17 multi-module project for custom Kafka Connect integrations: an HTTP REST source and a JDBC sink, with reliability primitives, containerized infrastructure and an evolving observability stack.
 
-> **Status: Active development.** MySQL 8.4 is now the primary local database target. The JDBC sink has a MySQL `ON DUPLICATE KEY UPDATE` SQL path and the local Compose stack includes Kafka, Schema Registry, Kafka Connect, MySQL, Prometheus, a JMX exporter and Grafana. This is not a production-readiness claim: incremental source semantics, per-record DLQ reporting, schema evolution and full end-to-end fault-recovery verification remain under development.
+> **Status: Active development.** MySQL 8.4 is now the primary local database target. The JDBC sink has a MySQL `ON DUPLICATE KEY UPDATE` SQL path and the local Compose stack includes Kafka, Schema Registry, Kafka Connect, MySQL, Prometheus, a JMX exporter and Grafana. This is not a production-readiness claim: the REST cursor contract is intentionally limited to stable ascending IDs, and full Kafka Connect end-to-end fault-recovery verification remains outstanding.
 
 ## Current implementation
 
@@ -12,12 +12,13 @@ A Java 17 multi-module project for custom Kafka Connect integrations: an HTTP RE
 - Java `HttpClient` polling with bounded connect/request timeouts
 - JSON object/array decoding and page-number pagination with a maximum-page guard
 - Stable record IDs emitted as Kafka Connect source offsets
-- Reads the saved source offset on task startup and resumes after that ID when it remains in the fetched snapshot
+- Reads the saved source offset on task startup and filters out IDs at or below the last committed ID (numeric comparison when possible, lexical otherwise)
+- Optional `rest.incremental.cursor.parameter` sends the last committed ID to APIs that accept a query cursor
 - Capped exponential retry with jitter for transient HTTP and I/O failures
 - HTTP 429/503 throttling honors `Retry-After` delta-seconds or HTTP-date headers (bounded to five minutes), falling back to exponential backoff when absent or invalid
 - Optional bearer-token authentication
 
-**Limitations:** the current checkpoint is based on a stable ID in a deterministic snapshot. It is not yet a general cursor/next-page-token implementation; disappearing IDs can cause snapshot replay. Robust API cursor/next-page-token strategies and strict monotonic checkpoint contracts remain roadmap work.
+**Limitations:** checkpointing assumes IDs are stable and monotonically ascending. Opaque cursors, arbitrary `next` links/tokens, compound keys and out-of-order APIs are not supported. Configure the cursor query parameter only when the remote API accepts the last ID as its cursor.
 
 ### JDBC sink
 - `Struct` records written with prepared statements
@@ -25,8 +26,10 @@ A Java 17 multi-module project for custom Kafka Connect integrations: an HTTP RE
 - MySQL-specific `INSERT ... ON DUPLICATE KEY UPDATE` when the JDBC URL is `jdbc:mysql:`
 - PostgreSQL/H2-compatible `ON CONFLICT` path retained for existing tests
 - Bounded retry for transient SQL execution errors; ambiguous commit failures fail the task rather than retrying blindly
+- Additive-only schema evolution adds nullable columns for newly observed Struct fields; existing column types are not altered
+- Uses Kafka Connect `ErrantRecordReporter` for malformed non-Struct/empty records when the worker provides a DLQ reporter; waits for the report future before returning
 
-**Limitations:** schema evolution and `ErrantRecordReporter`-based record-level DLQ reporting are not implemented yet. Schema changes within a task currently fail explicitly. Worker-level Kafka Connect DLQ configuration is not equivalent to connector-managed reporting of malformed records.
+**Limitations:** schema evolution is deliberately additive-only and database-specific DDL must be reviewed before production use. A schema/DDL failure is treated as an infrastructure failure and fails the task; it is not mislabeled as a malformed record. Configure the worker DLQ topic and error handling settings for the reporter to route records.
 
 ## Technology
 Java 17 · Apache Kafka Connect 3.8.1 · Maven · JUnit 5 · MySQL 8.4 · Docker Compose · Prometheus · Grafana
@@ -87,7 +90,7 @@ The local password is demonstrative and must never be reused in a deployed envir
 - Sink writes are grouped into JDBC transactions for each `put` call.
 - SQL execution retry is limited to recognized transient failures.
 - A failed commit has an ambiguous outcome and is surfaced as a task failure.
-- Worker DLQ settings are configured locally, but record-level `ErrantRecordReporter` support is still planned.
+- Malformed record reporting uses the worker-provided `ErrantRecordReporter`; worker DLQ settings must be enabled for routing.
 - Delivery should be treated as at-least-once; design keys and upsert semantics for idempotency.
 
 ## Roadmap
@@ -98,10 +101,13 @@ The local password is demonstrative and must never be reused in a deployed envir
 - [x] Local Kafka, Schema Registry, Kafka Connect and MySQL Compose services
 - [x] Prometheus, JMX exporter and provisioned Grafana dashboard scaffolding
 - [x] HTTP 429/503 retry handling with `Retry-After` parsing
-- [ ] Robust incremental cursor/checkpoint strategies and strict ordering guarantees
-- [ ] MySQL Testcontainers integration and Kafka/Schema Registry end-to-end tests
-- [ ] Schema evolution policy and safe DDL handling
-- [ ] ErrantRecordReporter-based malformed-record DLQ routing
+- [x] Stable ascending-ID checkpoint filtering and optional query cursor parameter
+- [ ] Opaque API cursors, next-page tokens and strict ordering guarantees
+- [x] MySQL Testcontainers sink-task integration tests
+- [ ] Kafka/Schema Registry/Kafka Connect-to-MySQL end-to-end tests
+- [x] Additive nullable-column schema evolution policy
+- [ ] Broader database dialect coverage and schema-evolution fault tests
+- [x] ErrantRecordReporter-based malformed-record reporting
 - [ ] Validate JMX exporter mappings and dashboard metrics against a live stack
 - [ ] Fault-injection tests for task restart, rebalance, DB outage and recovery
 
