@@ -19,7 +19,7 @@ public final class RestSourceConnector extends SourceConnector {
         .define(ID_FIELD, ConfigDef.Type.STRING, "id", ConfigDef.Importance.MEDIUM, "Stable JSON field used as the source offset")
         .define(POLL_INTERVAL, ConfigDef.Type.INT, 5000, ConfigDef.Range.atLeast(100), ConfigDef.Importance.LOW, "Delay between polls in milliseconds")
         .define(MAX_ATTEMPTS, ConfigDef.Type.INT, 3, ConfigDef.Range.between(1, 10), ConfigDef.Importance.MEDIUM, "Maximum HTTP attempts per poll")
-        .define(INITIAL_BACKOFF, ConfigDef.Type.LONG, 500L, ConfigDef.Range.atLeast(0L), ConfigDef.Importance.LOW, "Initial retry backoff in milliseconds");
+        .define(INITIAL_BACKOFF, ConfigDef.Type.LONG, 500L, ConfigDef.Range.between(0L, 30000L), ConfigDef.Importance.LOW, "Initial retry backoff in milliseconds");
 
     private Map<String, String> props;
     @Override public void start(Map<String, String> props) {
