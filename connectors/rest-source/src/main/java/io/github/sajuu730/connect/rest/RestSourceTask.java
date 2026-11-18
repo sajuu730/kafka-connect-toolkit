@@ -34,6 +34,7 @@ public final class RestSourceTask extends SourceTask {
     private String idField;
     private String bearerToken;
     private String pageParameter;
+    private String cursorParameter;
     private int startPage;
     private int maxPages;
     private long pollIntervalMs;
@@ -49,6 +50,7 @@ public final class RestSourceTask extends SourceTask {
         idField = props.getOrDefault(RestSourceConnector.ID_FIELD, "id");
         bearerToken = props.getOrDefault(RestSourceConnector.BEARER_TOKEN, "");
         pageParameter = props.getOrDefault(RestSourceConnector.PAGE_PARAMETER, "");
+        cursorParameter = props.getOrDefault(RestSourceConnector.CURSOR_PARAMETER, "");
         startPage = Integer.parseInt(props.getOrDefault(RestSourceConnector.START_PAGE, "1"));
         maxPages = Integer.parseInt(props.getOrDefault(RestSourceConnector.MAX_PAGES, "100"));
         pollIntervalMs = Long.parseLong(props.getOrDefault(RestSourceConnector.POLL_INTERVAL, "5000"));
@@ -75,26 +77,14 @@ public final class RestSourceTask extends SourceTask {
 
             Map<String, ?> partition = Map.of("endpoint", endpoint);
             List<SourceRecord> records = new ArrayList<>();
-            boolean resumeFound = lastEmittedId == null;
             for (JsonNode row : rows) {
                 if (!row.isObject()) throw new ConnectException("Every REST response record must be a JSON object");
                 JsonNode id = row.get(idField);
                 if (id == null || id.isNull()) throw new ConnectException("Response record is missing stable id field: " + idField);
                 String idValue = id.asText();
-                if (!resumeFound) {
-                    if (idValue.equals(lastEmittedId)) resumeFound = true;
-                    continue;
-                }
+                if (lastEmittedId != null && compareCursor(idValue, lastEmittedId) <= 0) continue;
                 records.add(new SourceRecord(partition, Map.of("id", idValue), topic,
                     org.apache.kafka.connect.data.Schema.STRING_SCHEMA, JSON.writeValueAsString(row)));
-            }
-            // If the API no longer contains the saved offset, replay the current snapshot rather than silently dropping it.
-            if (!resumeFound && lastEmittedId != null) {
-                for (JsonNode row : rows) {
-                    String idValue = row.path(idField).asText();
-                    records.add(new SourceRecord(partition, Map.of("id", idValue), topic,
-                        org.apache.kafka.connect.data.Schema.STRING_SCHEMA, JSON.writeValueAsString(row)));
-                }
             }
             if (records.isEmpty()) sleepWhileRunning(pollIntervalMs);
             return records;
@@ -113,12 +103,12 @@ public final class RestSourceTask extends SourceTask {
     private List<JsonNode> fetchRows() throws InterruptedException, IOException {
         List<JsonNode> rows = new ArrayList<>();
         if (pageParameter == null || pageParameter.isBlank()) {
-            appendResponseRows(fetchWithRetry(endpoint), rows);
+            appendResponseRows(fetchWithRetry(withCursorParameter(endpoint)), rows);
             return rows;
         }
         int page = startPage;
         for (int fetched = 0; fetched < maxPages; fetched++, page++) {
-            String pageUri = withPageParameter(endpoint, pageParameter, page);
+            String pageUri = withCursorParameter(withPageParameter(endpoint, pageParameter, page));
             HttpResponse<String> response = fetchWithRetry(pageUri);
             JsonNode root = JSON.readTree(response.body());
             if (!root.isArray()) {
@@ -140,6 +130,19 @@ public final class RestSourceTask extends SourceTask {
         if (root.isArray()) root.forEach(rows::add);
         else if (root.isObject()) rows.add(root);
         else throw new ConnectException("REST response must be a JSON object or array");
+    }
+
+
+    private String withCursorParameter(String uri) {
+        if (cursorParameter == null || cursorParameter.isBlank() || lastEmittedId == null) return uri;
+        String separator = uri.contains("?") ? "&" : "?";
+        return uri + separator + URLEncoder.encode(cursorParameter, StandardCharsets.UTF_8)
+            + "=" + URLEncoder.encode(lastEmittedId, StandardCharsets.UTF_8);
+    }
+
+    private static int compareCursor(String candidate, String committed) {
+        try { return new java.math.BigDecimal(candidate).compareTo(new java.math.BigDecimal(committed)); }
+        catch (NumberFormatException ignored) { return candidate.compareTo(committed); }
     }
 
     private static String withPageParameter(String endpoint, String parameter, int page) {
