@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
-@Testcontainers(disabledWithoutDocker = true)
+@Testcontainers
 class JdbcSinkMySqlContainerTest {
     @Container static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
         .withDatabaseName("kct").withUsername("kct").withPassword("kct-password");
