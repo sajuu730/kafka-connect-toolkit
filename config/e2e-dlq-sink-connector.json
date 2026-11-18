@@ -9,10 +9,5 @@
   "insert.mode": "insert",
   "batch.size": "1",
   "value.converter": "org.apache.kafka.connect.json.JsonConverter",
-  "value.converter.schemas.enable": "true",
-  "errors.tolerance": "all",
-  "errors.deadletterqueue.topic.name": "connect-dlq",
-  "errors.deadletterqueue.topic.replication.factor": "1",
-  "errors.deadletterqueue.context.headers.enable": "true",
-  "errors.log.enable": "true"
+  "value.converter.schemas.enable": "true"
 }
