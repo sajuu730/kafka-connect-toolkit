@@ -105,17 +105,17 @@ The local password is demonstrative and must never be reused in a deployed envir
 - [x] Stable ascending-ID checkpoint filtering and optional query cursor parameter
 - [ ] Opaque API cursors, next-page tokens and strict ordering guarantees
 - [x] MySQL Testcontainers sink-task integration tests
-- [x] Docker Compose end-to-end test harness for REST → Kafka/Avro/Schema Registry → MySQL, including worker restart
-- [ ] Obtain a successful CI run and extend the harness with database-outage and rebalance fault injection
+- [x] Docker Compose end-to-end test harness for REST → Kafka/Avro/Schema Registry → MySQL and worker restart
+- [x] Expanded harness for MySQL outage/replay, source-offset persistence, second-worker join/leave and monitoring checks (awaiting green CI)
 - [x] Additive nullable-column schema evolution policy
 - [ ] Broader database dialect coverage and schema-evolution fault tests
 - [x] ErrantRecordReporter-based malformed-record reporting
 - [x] Explicit JMX exporter mappings and Grafana panels for toolkit records, retries, failures, DLQ routing and last-success time
 - [ ] Validate metric scrape and dashboard queries against a live stack
 - [x] Connect worker restart exercised by the end-to-end smoke test (pending CI validation)
-- [ ] Fault-injection tests for task rebalance and database outage/recovery
+- [ ] Validate the expanded rebalance and database-outage/recovery scenarios in a successful CI run
 
 ## Verification
-Run `mvn --batch-mode verify` for unit and database integration tests. Run `docker compose up -d` followed by `bash scripts/e2e-smoke.sh` for the REST-to-MySQL runtime path and Connect worker restart. CI runs both jobs. Infrastructure and connector runtime behavior must pass in a live Docker environment before claiming production readiness.
+Run `mvn --batch-mode verify` for unit and database integration tests. Run `docker compose up -d` followed by `bash scripts/e2e-smoke.sh` for the REST-to-MySQL path, offset persistence, worker rebalance, MySQL outage/recovery and monitoring checks. CI runs both jobs. Infrastructure and connector runtime behavior must pass in a live Docker environment before claiming production readiness.
 
 See [Operations](docs/operations.md), [Architecture](docs/architecture.md) and [Contributing](CONTRIBUTING.md).
