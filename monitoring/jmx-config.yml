@@ -24,6 +24,9 @@ rules:
   - pattern: 'io.github.sajuu730.connect<.*type=ConnectorTask.*><>LastSuccessTimeEpochMs'
     name: kct_last_success_time_epoch_ms
     type: GAUGE
+  - pattern: 'kafka.connect<.*type=connector-task-metrics.*><>sink-record-lag-max'
+    name: kafka_connect_connector_task_sink_record_lag_max
+    type: GAUGE
   - pattern: 'kafka.connect<type=connector-task-metrics, connector=(.+), task=(.+)><>(.+)'
     name: kafka_connect_connector_task_$3
     labels:
