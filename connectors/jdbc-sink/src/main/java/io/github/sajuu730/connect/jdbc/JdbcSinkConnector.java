@@ -8,24 +8,18 @@ import java.util.List;
 import java.util.Map;
 
 public final class JdbcSinkConnector extends SinkConnector {
-    static final String URL = "connection.url";
-    static final String USER = "connection.user";
-    static final String PASSWORD = "connection.password";
-    static final String TABLE = "table.name";
-    static final String BATCH_SIZE = "batch.size";
-    static final String INSERT_MODE = "insert.mode";
-    static final String PK_FIELDS = "pk.fields";
+    static final String URL = "connection.url", USER = "connection.user", PASSWORD = "connection.password";
+    static final String TABLE = "table.name", BATCH_SIZE = "batch.size", INSERT_MODE = "insert.mode", PK_FIELDS = "pk.fields";
     static final ConfigDef CONFIG = new ConfigDef()
         .define(URL, ConfigDef.Type.STRING, ConfigDef.Importance.HIGH, "JDBC connection URL")
         .define(USER, ConfigDef.Type.STRING, "", ConfigDef.Importance.MEDIUM, "Database username")
         .define(PASSWORD, ConfigDef.Type.PASSWORD, ConfigDef.Importance.HIGH, "Database password")
         .define(TABLE, ConfigDef.Type.STRING, ConfigDef.Importance.HIGH, "Target table (optionally schema-qualified)")
         .define(BATCH_SIZE, ConfigDef.Type.INT, 500, ConfigDef.Range.between(1, 10000), ConfigDef.Importance.MEDIUM, "Maximum records per JDBC batch")
-        .define(INSERT_MODE, ConfigDef.Type.STRING, "insert", ConfigDef.ValidString.in("insert", "upsert"), ConfigDef.Importance.MEDIUM, "Write mode; upsert uses PostgreSQL ON CONFLICT")
+        .define(INSERT_MODE, ConfigDef.Type.STRING, "insert", ConfigDef.ValidString.in("insert", "upsert"), ConfigDef.Importance.MEDIUM, "Write mode; upsert uses the database-specific dialect")
         .define(PK_FIELDS, ConfigDef.Type.STRING, "", ConfigDef.Importance.MEDIUM, "Comma-separated conflict key fields required for upsert mode")
         .define("retry.max.attempts", ConfigDef.Type.INT, 3, ConfigDef.Range.between(1, 10), ConfigDef.Importance.MEDIUM, "Maximum retries for transient SQL failures")
         .define("retry.initial.backoff.ms", ConfigDef.Type.LONG, 500L, ConfigDef.Range.between(0L, 30000L), ConfigDef.Importance.LOW, "Initial retry backoff in milliseconds");
-
     private Map<String, String> taskProps;
     @Override public void start(Map<String, String> props) {
         Map<String, Object> parsed = CONFIG.parse(props);
