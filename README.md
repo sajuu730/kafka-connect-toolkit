@@ -1,8 +1,10 @@
 # Kafka Connect Toolkit
 
+[![CI](https://github.com/sajuu730/kafka-connect-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/sajuu730/kafka-connect-toolkit/actions/workflows/ci.yml)
+
 A Java-based toolkit for operating two reusable Kafka Connect integrations: an HTTP REST source and a relational JDBC sink. The repository is structured as independently packaged connector plugins with shared reliability primitives.
 
-> **Status:** Active development. The initial connector implementations, local runtime, retry handling, and packaging are in place. Compatibility and operational behavior still require automated CI and integration verification before production use.
+> **Status:** Active development. The Maven reactor build and all 7 current unit tests passed in GitHub Actions. Connector runtime behavior in a real Kafka Connect + PostgreSQL deployment is not yet covered by end-to-end tests, so this is not yet a production-readiness claim.
 
 ## Capabilities
 
@@ -147,6 +149,8 @@ The sink expects Kafka Connect JSON records with schemas enabled and a `Struct` 
 See [Architecture](docs/architecture.md) and [Operations](docs/operations.md) for semantics and deployment notes.
 
 ## Verification
+
+**Latest verified CI run:** Maven `verify` passed; 7 tests passed across the common, REST source, and JDBC sink modules. The workflow compiles the modules, executes unit tests, and packages both shaded connector plugins.
 
 Run the full unit-test and packaging lifecycle:
 
