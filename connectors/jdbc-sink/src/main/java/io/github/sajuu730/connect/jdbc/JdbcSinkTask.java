@@ -67,13 +67,12 @@ public final class JdbcSinkTask extends SinkTask {
                 reportMalformed(record, new ConnectException("JDBC sink cannot insert a Struct with no fields"));
                 continue;
             }
-            if (columns.isEmpty()) columns = rowColumns;
-            if (!columns.equals(rowColumns)) {
-                reportMalformed(record, new ConnectException(
-                    "Record schema changed within task; schema evolution is not enabled for this task"));
-                continue;
+            try {
+                evolveSchema(struct.schema());
+                validRecords.add(record);
+            } catch (SQLException schemaFailure) {
+                reportMalformed(record, new ConnectException("Unable to evolve target table schema", schemaFailure));
             }
-            validRecords.add(record);
         }
         if (validRecords.isEmpty()) return;
         for (int attempt = 1; attempt <= retryPolicy.maxAttempts(); attempt++) {
@@ -129,12 +128,54 @@ public final class JdbcSinkTask extends SinkTask {
             int pending = 0;
             for (SinkRecord record : records) {
                 Struct struct = (Struct) record.value();
-                for (int i = 0; i < columns.size(); i++) statement.setObject(i + 1, struct.get(columns.get(i)));
+                for (int i = 0; i < columns.size(); i++) {
+                    String column = columns.get(i);
+                    statement.setObject(i + 1, struct.schema().field(column) == null ? null : struct.get(column));
+                }
                 statement.addBatch();
                 if (++pending % batchSize == 0) statement.executeBatch();
             }
             if (pending % batchSize != 0) statement.executeBatch();
         }
+    }
+
+
+    /** Additive-only evolution: new fields become nullable columns; existing types are never altered automatically. */
+    private void evolveSchema(org.apache.kafka.connect.data.Schema schema) throws SQLException {
+        DatabaseMetaData metadata = connection.getMetaData();
+        String tableName = table.contains(".") ? table.substring(table.lastIndexOf('.') + 1) : table;
+        String schemaName = table.contains(".") ? table.substring(0, table.lastIndexOf('.')) : null;
+        java.util.Set<String> existing = new java.util.HashSet<>();
+        try (ResultSet rs = metadata.getColumns(connection.getCatalog(), schemaName, tableName, null)) {
+            while (rs.next()) existing.add(rs.getString("COLUMN_NAME").toLowerCase(java.util.Locale.ROOT));
+        }
+        List<String> discovered = new ArrayList<>(columns);
+        String quoteChar = mysql() ? Character.toString((char) 96) : "\"";
+        for (Field field : schema.fields()) {
+            String name = field.name();
+            if (!IDENTIFIER.matcher(name).matches()) throw new ConnectException("Unsafe incoming field name: " + name);
+            if (!existing.contains(name.toLowerCase(java.util.Locale.ROOT))) {
+                String ddl = "ALTER TABLE " + quoteQualified(table, quoteChar) + " ADD COLUMN "
+                    + quote(name, quoteChar) + " " + sqlType(field.schema()) + " NULL";
+                try (Statement statement = connection.createStatement()) { statement.executeUpdate(ddl); }
+                existing.add(name.toLowerCase(java.util.Locale.ROOT));
+            }
+            if (!discovered.contains(name)) discovered.add(name);
+        }
+        columns = List.copyOf(discovered);
+    }
+
+    private String sqlType(org.apache.kafka.connect.data.Schema schema) {
+        return switch (schema.type()) {
+            case INT8, INT16, INT32 -> "INT";
+            case INT64 -> "BIGINT";
+            case FLOAT32 -> "FLOAT";
+            case FLOAT64 -> "DOUBLE";
+            case BOOLEAN -> "BOOLEAN";
+            case STRING -> "VARCHAR(1024)";
+            case BYTES -> "BLOB";
+            case ARRAY, MAP, STRUCT -> "TEXT";
+        };
     }
 
     private String buildInsertSql() {
