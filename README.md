@@ -4,7 +4,7 @@
 
 A Java 17 multi-module project for custom Kafka Connect integrations: an HTTP REST source and a JDBC sink, with reliability primitives, containerized infrastructure and an evolving observability stack.
 
-> **Status: Active development.** MySQL 8.4 is now the primary local database target. The JDBC sink has a MySQL `ON DUPLICATE KEY UPDATE` SQL path and the local Compose stack includes Kafka, Schema Registry, Kafka Connect, MySQL, Prometheus alert rules, a JMX exporter and Grafana. This is not a production-readiness claim: the baseline REST-to-MySQL pipeline and worker restart have passed CI. The expanded suite now adds MySQL outage/replay, source-offset persistence, second-worker rebalancing and live monitoring assertions; that expanded run is still being validated. The REST cursor contract remains limited to stable ascending IDs.
+> **Status: Active development.** MySQL 8.4 is now the primary local database target. The JDBC sink has a MySQL `ON DUPLICATE KEY UPDATE` SQL path and the local Compose stack includes Kafka, Schema Registry, Kafka Connect, MySQL, Prometheus alert rules, a JMX exporter and Grafana. This is not a production-readiness claim: the baseline REST-to-MySQL pipeline and worker restart have passed CI. The expanded suite now adds DLQ routing, MySQL outage/replay, source-offset persistence, second-worker rebalancing and live monitoring assertions; that expanded run is still being validated. The REST cursor contract remains limited to stable ascending IDs.
 
 ## Current implementation
 
@@ -33,7 +33,7 @@ A Java 17 multi-module project for custom Kafka Connect integrations: an HTTP RE
 **Limitations:** schema evolution is deliberately additive-only and database-specific DDL must be reviewed before production use. A schema/DDL failure is treated as an infrastructure failure and fails the task; it is not mislabeled as a malformed record. Configure sink connector-level `errors.tolerance=all` and `errors.deadletterqueue.topic.name` settings for the reporter to route records.
 
 ## Technology
-Java 17 · Apache Kafka Connect 3.8.1 · Maven · JUnit 5 · MySQL 8.4 · Docker Compose · Prometheus · Grafana
+Java 17 · Apache Kafka Connect 3.8.1 · Avro/Schema Registry · Maven · JUnit 5 · Testcontainers · MySQL 8.4 · Docker Compose · Prometheus · Grafana
 
 ## Repository layout
 ```text
