@@ -64,6 +64,41 @@ services:
     volumes:
       - ./connectors/rest-source/target:/opt/connectors/rest-source:ro
       - ./connectors/jdbc-sink/target:/opt/connectors/jdbc-sink:ro
+  connect-worker-2:
+    image: confluentinc/cp-kafka-connect:7.8.0
+    hostname: connect-worker-2
+    profiles: ["rebalance"]
+    depends_on:
+      kafka: { condition: service_healthy }
+      schema-registry: { condition: service_started }
+      mysql: { condition: service_healthy }
+      mock-api: { condition: service_started }
+    ports: ["8084:8083"]
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:29092
+      CONNECT_REST_ADVERTISED_HOST_NAME: connect-worker-2
+      CONNECT_GROUP_ID: kafka-connect-toolkit
+      CONNECT_CONFIG_STORAGE_TOPIC: _kct-connect-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: _kct-connect-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: _kct-connect-status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_FLUSH_INTERVAL_MS: 1000
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components,/opt/connectors
+      CONNECT_ERRORS_TOLERANCE: all
+      CONNECT_ERRORS_DEADLETTERQUEUE_TOPIC_NAME: connect-dlq
+      CONNECT_ERRORS_DEADLETTERQUEUE_CONTEXT_HEADERS_ENABLE: "true"
+      CONNECT_ERRORS_LOG_ENABLE: "true"
+      CONNECT_ERRORS_LOG_INCLUDE_MESSAGES: "false"
+      JMX_PORT: 9999
+      KAFKA_JMX_OPTS: "-Djava.rmi.server.hostname=connect-worker-2 -Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false"
+    volumes:
+      - ./connectors/rest-source/target:/opt/connectors/rest-source:ro
+      - ./connectors/jdbc-sink/target:/opt/connectors/jdbc-sink:ro
   mock-api:
     image: mockserver/mockserver:5.15.0
     hostname: mock-api
