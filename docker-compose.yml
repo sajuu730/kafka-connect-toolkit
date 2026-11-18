@@ -37,6 +37,7 @@ services:
       kafka: { condition: service_healthy }
       schema-registry: { condition: service_started }
       mysql: { condition: service_healthy }
+      mock-api: { condition: service_started }
     ports: ["8083:8083", "9999:9999"]
     environment:
       CONNECT_BOOTSTRAP_SERVERS: kafka:29092
@@ -47,6 +48,7 @@ services:
       CONNECT_STATUS_STORAGE_TOPIC: _kct-connect-status
       CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
       CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_FLUSH_INTERVAL_MS: 1000
       CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
       CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
@@ -62,6 +64,15 @@ services:
     volumes:
       - ./connectors/rest-source/target:/opt/connectors/rest-source:ro
       - ./connectors/jdbc-sink/target:/opt/connectors/jdbc-sink:ro
+  mock-api:
+    image: mockserver/mockserver:5.15.0
+    hostname: mock-api
+    ports: ["1080:1080"]
+    environment:
+      MOCKSERVER_INITIALIZATION_JSON_PATH: /config/init.json
+      MOCKSERVER_LOG_LEVEL: WARN
+    volumes:
+      - ./config/mockserver-initialization.json:/config/init.json:ro
   mysql:
     image: mysql:8.4
     hostname: mysql
