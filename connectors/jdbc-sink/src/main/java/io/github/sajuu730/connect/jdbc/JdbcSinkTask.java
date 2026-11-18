@@ -51,6 +51,8 @@ public final class JdbcSinkTask extends SinkTask {
         long initialBackoff = Long.parseLong(props.getOrDefault("retry.initial.backoff.ms", "500"));
         if (batchSize < 1 || attempts < 1 || initialBackoff < 0 || !List.of("insert", "upsert").contains(insertMode))
             throw new ConnectException("Invalid JDBC batch or retry configuration");
+        if ("upsert".equals(insertMode) && primaryKeyFields.isEmpty())
+            throw new ConnectException("pk.fields must be configured when insert.mode=upsert");
         retryPolicy = new RetryPolicy(attempts, Duration.ofMillis(initialBackoff), Duration.ofSeconds(30), 0.2);
         openConnection();
         metrics = new TaskMetrics("jdbc-sink");
