@@ -4,7 +4,7 @@
 
 A Java-based toolkit for operating two reusable Kafka Connect integrations: an HTTP REST source and a relational JDBC sink. The repository is structured as independently packaged connector plugins with shared reliability primitives.
 
-> **Status:** Active development. The Maven reactor build and all 8 automated tests (including a PostgreSQL integration test) passed in GitHub Actions. Connector runtime behavior in a real Kafka Connect + PostgreSQL deployment is not yet covered by end-to-end tests, so this is not yet a production-readiness claim.
+> **Status:** Active development. The Maven reactor build and all 9 automated tests (including a PostgreSQL integration test) passed in GitHub Actions. Connector runtime behavior in a real Kafka Connect + PostgreSQL deployment is not yet covered by end-to-end tests, so this is not yet a production-readiness claim.
 
 ## Capabilities
 
@@ -154,7 +154,7 @@ See [Architecture](docs/architecture.md) and [Operations](docs/operations.md) fo
 
 ## Verification
 
-**Latest verified CI run:** Maven `verify` passed; 8 tests passed across the common, REST source, and JDBC sink modules, including a real PostgreSQL service integration test. The workflow compiles the modules, executes unit tests plus a PostgreSQL service-backed JDBC integration test, and packages both shaded connector plugins.
+**Latest verified CI run:** Maven `verify` passed; 9 tests passed across the common, REST source, and JDBC sink modules, including a real PostgreSQL service integration test. The workflow compiles the modules, executes unit tests plus a PostgreSQL service-backed JDBC integration test, and packages both shaded connector plugins.
 
 Run the full unit-test and packaging lifecycle:
 
