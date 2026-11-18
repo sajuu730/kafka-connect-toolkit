@@ -54,11 +54,6 @@ services:
       CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
       CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
       CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components,/opt/connectors
-      CONNECT_ERRORS_TOLERANCE: all
-      CONNECT_ERRORS_DEADLETTERQUEUE_TOPIC_NAME: connect-dlq
-      CONNECT_ERRORS_DEADLETTERQUEUE_CONTEXT_HEADERS_ENABLE: "true"
-      CONNECT_ERRORS_LOG_ENABLE: "true"
-      CONNECT_ERRORS_LOG_INCLUDE_MESSAGES: "false"
       JMX_PORT: 9999
       KAFKA_JMX_OPTS: "-Djava.rmi.server.hostname=connect -Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.port=9999 -Dcom.sun.management.jmxremote.rmi.port=9999 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false"
     volumes:
@@ -89,11 +84,6 @@ services:
       CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
       CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
       CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components,/opt/connectors
-      CONNECT_ERRORS_TOLERANCE: all
-      CONNECT_ERRORS_DEADLETTERQUEUE_TOPIC_NAME: connect-dlq
-      CONNECT_ERRORS_DEADLETTERQUEUE_CONTEXT_HEADERS_ENABLE: "true"
-      CONNECT_ERRORS_LOG_ENABLE: "true"
-      CONNECT_ERRORS_LOG_INCLUDE_MESSAGES: "false"
       JMX_PORT: 9999
       KAFKA_JMX_OPTS: "-Djava.rmi.server.hostname=connect-worker-2 -Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.port=9999 -Dcom.sun.management.jmxremote.rmi.port=9999 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false"
     volumes:
