@@ -11,6 +11,17 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class JdbcSinkTaskTest {
+    @Test void rejectsUnsafeTableIdentifiersBeforeOpeningConnection() {
+        JdbcSinkTask task = new JdbcSinkTask();
+        var error = assertThrows(org.apache.kafka.connect.errors.ConnectException.class, () ->
+            task.start(Map.of(
+                "connection.url", "jdbc:postgresql://localhost:5432/unused",
+                "connection.user", "unused",
+                "connection.password", "unused",
+                "table.name", "events; DROP TABLE users")));
+        assertTrue(error.getMessage().contains("Unsafe table.name"));
+    }
+
     @Test void writesStructRecordsInBatchesAndCommits() throws Exception {
         String url = "jdbc:h2:mem:jdbc_sink_test;DB_CLOSE_DELAY=-1";
         try (var connection = DriverManager.getConnection(url);
