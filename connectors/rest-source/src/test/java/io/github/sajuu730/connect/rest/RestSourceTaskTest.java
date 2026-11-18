@@ -77,5 +77,40 @@ class RestSourceTaskTest {
         task.stop();
     }
 
+    @Test void readsAllConfiguredPagesUntilTheEmptyPage() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/events", exchange -> {
+            String query = exchange.getRequestURI().getRawQuery();
+            String body = switch (query) {
+                case "page=1" -> "[{\"id\":\"page-1\"}]";
+                case "page=2" -> "[{\"id\":\"page-2\"}]";
+                case "page=3" -> "[]";
+                default -> throw new IllegalArgumentException("Unexpected page query: " + query);
+            };
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+
+        OffsetStorageReader offsets = mock(OffsetStorageReader.class);
+        when(offsets.offset(Map.of("endpoint", endpoint()))).thenReturn(null);
+        SourceTaskContext context = mock(SourceTaskContext.class);
+        when(context.offsetStorageReader()).thenReturn(offsets);
+
+        RestSourceTask task = new RestSourceTask();
+        task.initialize(context);
+        task.start(Map.of(
+            "rest.endpoint", endpoint(), "kafka.topic", "events",
+            "poll.interval.ms", "100", "rest.pagination.page.parameter", "page",
+            "rest.pagination.start.page", "1", "rest.pagination.max.pages", "5"));
+        List<SourceRecord> records = task.poll();
+        assertEquals(2, records.size());
+        assertEquals(Map.of("id", "page-1"), records.get(0).sourceOffset());
+        assertEquals(Map.of("id", "page-2"), records.get(1).sourceOffset());
+        task.stop();
+    }
+
     private String endpoint() { return "http://127.0.0.1:" + server.getAddress().getPort() + "/events"; }
 }
