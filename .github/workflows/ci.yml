@@ -27,6 +27,7 @@ jobs:
       KCT_POSTGRES_TEST_URL: jdbc:postgresql://localhost:5432/kct_test
       KCT_POSTGRES_TEST_USER: kct_test
       KCT_POSTGRES_TEST_PASSWORD: kct_test_password
+      DOCKER_HOST: unix:///var/run/docker.sock
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -34,6 +35,8 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: maven
+      - name: Verify Docker is available for Testcontainers
+        run: docker info
       - name: Verify
         run: mvn --batch-mode --no-transfer-progress verify
 
