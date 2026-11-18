@@ -22,6 +22,7 @@ public final class RestSourceTask extends SourceTask {
     private String endpoint;
     private String topic;
     private String idField;
+    private String bearerToken;
     private long pollIntervalMs;
     private RetryPolicy retryPolicy;
     private volatile boolean running;
@@ -31,6 +32,7 @@ public final class RestSourceTask extends SourceTask {
         endpoint = required(props, RestSourceConnector.ENDPOINT);
         topic = required(props, RestSourceConnector.TOPIC);
         idField = props.getOrDefault(RestSourceConnector.ID_FIELD, "id");
+        bearerToken = props.getOrDefault(RestSourceConnector.BEARER_TOKEN, "");
         pollIntervalMs = Long.parseLong(props.getOrDefault(RestSourceConnector.POLL_INTERVAL, "5000"));
         int attempts = Integer.parseInt(props.getOrDefault(RestSourceConnector.MAX_ATTEMPTS, "3"));
         long initialBackoff = Long.parseLong(props.getOrDefault(RestSourceConnector.INITIAL_BACKOFF, "500"));
@@ -100,8 +102,11 @@ public final class RestSourceTask extends SourceTask {
         Exception lastFailure = null;
         for (int attempt = 1; attempt <= retryPolicy.maxAttempts() && running; attempt++) {
             try {
-                var request = HttpRequest.newBuilder(URI.create(endpoint))
-                    .timeout(Duration.ofSeconds(30)).header("Accept", "application/json").GET().build();
+                var builder = HttpRequest.newBuilder(URI.create(endpoint))
+                    .timeout(Duration.ofSeconds(30)).header("Accept", "application/json");
+                if (bearerToken != null && !bearerToken.isBlank())
+                    builder.header("Authorization", "Bearer " + bearerToken);
+                var request = builder.GET().build();
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                 int status = response.statusCode();
                 if (status >= 200 && status < 300) return response;
