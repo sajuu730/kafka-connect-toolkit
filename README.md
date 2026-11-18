@@ -13,6 +13,7 @@ A Java-based toolkit for operating two reusable Kafka Connect integrations: an H
 - Stores a stable record identifier as the Kafka Connect source offset
 - Resumes after the last committed identifier when that identifier remains in the API snapshot
 - Retries HTTP 429 and 5xx responses and I/O failures with capped exponential backoff and jitter
+- Supports optional bearer-token authentication without logging token values
 - Uses bounded request and connection timeouts
 
 **Current limitations:** no authentication, pagination, incremental cursor support, rate-limit parsing, or custom field mapping. If the saved ID disappears from the returned snapshot, the task replays the snapshot. The API must provide stable, unique IDs and a deterministic order for meaningful resume behavior.
@@ -101,6 +102,7 @@ POST a connector configuration to `http://localhost:8083/connectors`:
     "rest.endpoint": "https://api.example.com/events",
     "kafka.topic": "rest-events",
     "record.id.field": "id",
+    "rest.auth.bearer.token": "REPLACE_WITH_SECRET_IF_REQUIRED",
     "poll.interval.ms": "5000",
     "retry.max.attempts": "3",
     "retry.initial.backoff.ms": "500"
@@ -108,7 +110,7 @@ POST a connector configuration to `http://localhost:8083/connectors`:
 }
 ```
 
-The API endpoint must return an object or array of objects, each with a stable `id` field (or the configured `record.id.field`).
+The API endpoint must return an object or array of objects, each with a stable `id` field (or the configured `record.id.field`). The bearer-token property is optional; use a Kafka Connect secret/config provider for production secrets and never commit real tokens.
 
 ### JDBC Sink
 
@@ -156,7 +158,7 @@ CI runs this command on pushes and pull requests to `main`. Integration tests ag
 ## Engineering roadmap
 
 - [x] Establish Java 17 Maven modules and shared retry policy
-- [x] Implement initial REST source polling and source offsets
+- [x] Implement initial REST source polling, bearer authentication, and acknowledged source offsets
 - [x] Implement initial JDBC sink batching and transactional writes
 - [x] Add plugin packaging and service registration
 - [x] Add Docker Compose development environment and worker DLQ configuration
