@@ -7,9 +7,32 @@
     "httpResponse": {
       "statusCode": 200,
       "headers": [
-        { "name": "Content-Type", "values": ["application/json"] }
+        {
+          "name": "Content-Type",
+          "values": [
+            "application/json"
+          ]
+        }
       ],
       "body": "[{\"id\":\"e2e-1\",\"event_type\":\"created\",\"payload\":{\"source\":\"mock-api\"}}]"
+    }
+  },
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/recovery"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "values": [
+            "application/json"
+          ]
+        }
+      ],
+      "body": "[{\"id\":\"e2e-2\",\"event_type\":\"recovered\",\"payload\":{\"source\":\"database-recovery\"}}]"
     }
   }
 ]
