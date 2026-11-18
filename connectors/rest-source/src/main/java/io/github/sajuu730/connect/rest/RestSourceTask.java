@@ -13,6 +13,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +29,9 @@ public final class RestSourceTask extends SourceTask {
     private String topic;
     private String idField;
     private String bearerToken;
+    private String pageParameter;
+    private int startPage;
+    private int maxPages;
     private long pollIntervalMs;
     private RetryPolicy retryPolicy;
     private TaskMetrics metrics;
@@ -39,10 +44,13 @@ public final class RestSourceTask extends SourceTask {
         topic = required(props, RestSourceConnector.TOPIC);
         idField = props.getOrDefault(RestSourceConnector.ID_FIELD, "id");
         bearerToken = props.getOrDefault(RestSourceConnector.BEARER_TOKEN, "");
+        pageParameter = props.getOrDefault(RestSourceConnector.PAGE_PARAMETER, "");
+        startPage = Integer.parseInt(props.getOrDefault(RestSourceConnector.START_PAGE, "1"));
+        maxPages = Integer.parseInt(props.getOrDefault(RestSourceConnector.MAX_PAGES, "100"));
         pollIntervalMs = Long.parseLong(props.getOrDefault(RestSourceConnector.POLL_INTERVAL, "5000"));
         int attempts = Integer.parseInt(props.getOrDefault(RestSourceConnector.MAX_ATTEMPTS, "3"));
         long initialBackoff = Long.parseLong(props.getOrDefault(RestSourceConnector.INITIAL_BACKOFF, "500"));
-        if (pollIntervalMs < 100 || attempts < 1 || initialBackoff < 0)
+        if (pollIntervalMs < 100 || attempts < 1 || initialBackoff < 0 || startPage < 0 || maxPages < 1)
             throw new ConnectException("Invalid REST source polling or retry configuration");
         retryPolicy = new RetryPolicy(attempts, Duration.ofMillis(initialBackoff),
             Duration.ofSeconds(30), 0.2);
@@ -59,12 +67,7 @@ public final class RestSourceTask extends SourceTask {
     @Override public List<SourceRecord> poll() throws InterruptedException {
         if (!running) return List.of();
         try {
-            HttpResponse<String> response = fetchWithRetry();
-            JsonNode root = JSON.readTree(response.body());
-            List<JsonNode> rows = new ArrayList<>();
-            if (root.isArray()) root.forEach(rows::add);
-            else if (root.isObject()) rows.add(root);
-            else throw new ConnectException("REST response must be a JSON object or array");
+            List<JsonNode> rows = fetchRows();
 
             Map<String, ?> partition = Map.of("endpoint", endpoint);
             List<SourceRecord> records = new ArrayList<>();
@@ -103,11 +106,52 @@ public final class RestSourceTask extends SourceTask {
         }
     }
 
-    private HttpResponse<String> fetchWithRetry() throws InterruptedException {
+    private List<JsonNode> fetchRows() throws InterruptedException, IOException {
+        List<JsonNode> rows = new ArrayList<>();
+        if (pageParameter == null || pageParameter.isBlank()) {
+            appendResponseRows(fetchWithRetry(endpoint), rows);
+            return rows;
+        }
+        int page = startPage;
+        for (int fetched = 0; fetched < maxPages; fetched++, page++) {
+            String pageUri = withPageParameter(endpoint, pageParameter, page);
+            HttpResponse<String> response = fetchWithRetry(pageUri);
+            JsonNode root = JSON.readTree(response.body());
+            if (!root.isArray()) {
+                if (root.isObject()) {
+                    rows.add(root);
+                    return rows;
+                }
+                throw new ConnectException("Paginated REST response must be a JSON array or object");
+            }
+            if (root.isEmpty()) return rows;
+            root.forEach(rows::add);
+        }
+        throw new ConnectException("REST pagination exceeded rest.pagination.max.pages=" + maxPages
+            + "; increase the limit or use an endpoint with a bounded result set");
+    }
+
+    private static void appendResponseRows(HttpResponse<String> response, List<JsonNode> rows) throws IOException {
+        JsonNode root = JSON.readTree(response.body());
+        if (root.isArray()) root.forEach(rows::add);
+        else if (root.isObject()) rows.add(root);
+        else throw new ConnectException("REST response must be a JSON object or array");
+    }
+
+    private static String withPageParameter(String endpoint, String parameter, int page) {
+        String encodedName = URLEncoder.encode(parameter, StandardCharsets.UTF_8);
+        int fragmentAt = endpoint.indexOf('#');
+        String base = fragmentAt >= 0 ? endpoint.substring(0, fragmentAt) : endpoint;
+        String fragment = fragmentAt >= 0 ? endpoint.substring(fragmentAt) : "";
+        String separator = base.contains("?") ? "&" : "?";
+        return base + separator + encodedName + "=" + page + fragment;
+    }
+
+    private HttpResponse<String> fetchWithRetry(String requestUri) throws InterruptedException {
         Exception lastFailure = null;
         for (int attempt = 1; attempt <= retryPolicy.maxAttempts() && running; attempt++) {
             try {
-                var builder = HttpRequest.newBuilder(URI.create(endpoint))
+                var builder = HttpRequest.newBuilder(URI.create(requestUri))
                     .timeout(Duration.ofSeconds(30)).header("Accept", "application/json");
                 if (bearerToken != null && !bearerToken.isBlank())
                     builder.header("Authorization", "Bearer " + bearerToken);
