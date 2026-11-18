@@ -14,9 +14,10 @@ A Java 17 multi-module project for custom Kafka Connect integrations: an HTTP RE
 - Stable record IDs emitted as Kafka Connect source offsets
 - Reads the saved source offset on task startup and resumes after that ID when it remains in the fetched snapshot
 - Capped exponential retry with jitter for transient HTTP and I/O failures
+- HTTP 429/503 throttling honors `Retry-After` delta-seconds or HTTP-date headers (bounded to five minutes), falling back to exponential backoff when absent or invalid
 - Optional bearer-token authentication
 
-**Limitations:** the current checkpoint is based on a stable ID in a deterministic snapshot. It is not yet a general cursor/next-page-token implementation; disappearing IDs can cause snapshot replay. `Retry-After` header interpretation and robust incremental API cursor strategies remain roadmap work.
+**Limitations:** the current checkpoint is based on a stable ID in a deterministic snapshot. It is not yet a general cursor/next-page-token implementation; disappearing IDs can cause snapshot replay. Robust API cursor/next-page-token strategies and strict monotonic checkpoint contracts remain roadmap work.
 
 ### JDBC sink
 - `Struct` records written with prepared statements
@@ -96,7 +97,8 @@ The local password is demonstrative and must never be reused in a deployed envir
 - [x] MySQL driver and MySQL upsert SQL dialect
 - [x] Local Kafka, Schema Registry, Kafka Connect and MySQL Compose services
 - [x] Prometheus, JMX exporter and provisioned Grafana dashboard scaffolding
-- [ ] Robust incremental cursor/checkpoint strategies and HTTP Retry-After support
+- [x] HTTP 429/503 retry handling with `Retry-After` parsing
+- [ ] Robust incremental cursor/checkpoint strategies and strict ordering guarantees
 - [ ] MySQL Testcontainers integration and Kafka/Schema Registry end-to-end tests
 - [ ] Schema evolution policy and safe DDL handling
 - [ ] ErrantRecordReporter-based malformed-record DLQ routing
