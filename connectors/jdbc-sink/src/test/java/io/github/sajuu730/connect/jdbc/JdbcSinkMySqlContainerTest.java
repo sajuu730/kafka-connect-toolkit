@@ -4,6 +4,11 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
+import org.apache.kafka.connect.sink.ErrantRecordReporter;
+import org.apache.kafka.clients.producer.RecordMetadata;
+import java.util.concurrent.CompletableFuture;
+import static org.mockito.Mockito.*;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -36,6 +41,26 @@ class JdbcSinkMySqlContainerTest {
              var st=c.createStatement(); var rs=st.executeQuery("SELECT payload FROM events WHERE id='e1'")) {
             assertTrue(rs.next()); assertEquals("updated",rs.getString(1)); assertFalse(rs.next());
         }
+    }
+
+    @Test void reportsMalformedRecordsThroughErrantRecordReporter() throws Exception {
+        try (var c=DriverManager.getConnection(MYSQL.getJdbcUrl(),MYSQL.getUsername(),MYSQL.getPassword());
+             var st=c.createStatement()) {
+            st.execute("CREATE TABLE malformed_events (id VARCHAR(64) PRIMARY KEY)");
+        }
+        ErrantRecordReporter reporter=mock(ErrantRecordReporter.class);
+        when(reporter.report(any(SinkRecord.class), any(Throwable.class)))
+            .thenReturn(CompletableFuture.completedFuture(null));
+        SinkTaskContext context=mock(SinkTaskContext.class);
+        when(context.errantRecordReporter()).thenReturn(reporter);
+        JdbcSinkTask task=new JdbcSinkTask();
+        task.initialize(context);
+        task.start(Map.of("connection.url",MYSQL.getJdbcUrl(),"connection.user",MYSQL.getUsername(),
+            "connection.password",MYSQL.getPassword(),"table.name","malformed_events"));
+        try {
+            task.put(List.of(new SinkRecord("events",0,null,null,null,"not-a-struct",0L)));
+            verify(reporter, times(1)).report(any(SinkRecord.class), any(Throwable.class));
+        } finally { task.stop(); }
     }
 
     @Test void addsNullableColumnWhenStructSchemaGrows() throws Exception {
