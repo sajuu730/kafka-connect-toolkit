@@ -9,7 +9,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -34,21 +34,30 @@ public final class JdbcSinkTask extends SinkTask {
         } catch (SQLException ex) { throw new ConnectException("Unable to open JDBC connection", ex); }
     }
 
-    @Override public void put(Collection< SinkRecord > records) {
+    @Override public void put(Collection<SinkRecord> records) {
         if (records.isEmpty()) return;
         try {
-            for (SinkRecord record : records) {
-                if (!(record.value() instanceof Struct struct))
-                    throw new ConnectException("JDBC sink currently requires Struct record values");
-                List<String> rowColumns = struct.schema().fields().stream().map(Field::name).toList();
-                if (columns.isEmpty()) columns = rowColumns;
-                if (!columns.equals(rowColumns)) throw new ConnectException("Record schema changed within task; use a stable target schema");
-                String sql = "INSERT INTO " + table + " (" + columns.stream().map(JdbcSinkTask::quote).collect(Collectors.joining(","))
-                    + ") VALUES (" + String.join(",", java.util.Collections.nCopies(columns.size(), "?")) + ")";
-                try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int pending = 0;
+            PreparedStatement statement = null;
+            try {
+                for (SinkRecord record : records) {
+                    if (!(record.value() instanceof Struct struct))
+                        throw new ConnectException("JDBC sink currently requires Struct record values");
+                    List<String> rowColumns = struct.schema().fields().stream().map(Field::name).toList();
+                    if (columns.isEmpty()) columns = rowColumns;
+                    if (!columns.equals(rowColumns)) throw new ConnectException("Record schema changed within task; use a stable target schema");
+                    if (statement == null) {
+                        String sql = "INSERT INTO " + table + " (" + columns.stream().map(JdbcSinkTask::quote).collect(Collectors.joining(","))
+                            + ") VALUES (" + String.join(",", java.util.Collections.nCopies(columns.size(), "?")) + ")";
+                        statement = connection.prepareStatement(sql);
+                    }
                     for (int i = 0; i < columns.size(); i++) statement.setObject(i + 1, struct.get(columns.get(i)));
-                    statement.executeUpdate();
+                    statement.addBatch();
+                    if (++pending % batchSize == 0) statement.executeBatch();
                 }
+                if (statement != null) statement.executeBatch();
+            } finally {
+                if (statement != null) statement.close();
             }
             connection.commit();
         } catch (Exception ex) {
@@ -58,7 +67,6 @@ public final class JdbcSinkTask extends SinkTask {
         }
     }
 
-    @Override public void flush(Map<org.apache.kafka.connect.kafka.KafkaTopicPartition, Long> offsets) { }
     @Override public void stop() {
         if (connection != null) try { connection.close(); } catch (SQLException ex) { throw new ConnectException("Failed to close JDBC connection", ex); }
     }
