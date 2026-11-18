@@ -42,15 +42,15 @@ class JdbcSinkPostgresIntegrationTest {
             .field("event_type", Schema.STRING_SCHEMA)
             .field("payload", Schema.OPTIONAL_STRING_SCHEMA)
             .build();
-        Struct value = new Struct(schema)
+        Struct firstValue = new Struct(schema)
             .put("id", "pg-event-1")
             .put("event_type", "created")
             .put("payload", "{\"source\":\"postgres-integration\"}");
-        SinkRecord record = new SinkRecord("events", 0, null, null, schema, value, 0L);
         Struct updatedValue = new Struct(schema)
             .put("id", "pg-event-1")
             .put("event_type", "updated")
-            .put("payload", "{\\"source\\":\\"upsert\\"}");
+            .put("payload", "{\"source\":\"upsert\"}");
+        SinkRecord first = new SinkRecord("events", 0, null, null, schema, firstValue, 0L);
         SinkRecord update = new SinkRecord("events", 0, null, null, schema, updatedValue, 1L);
 
         JdbcSinkTask task = new JdbcSinkTask();
@@ -65,7 +65,7 @@ class JdbcSinkPostgresIntegrationTest {
             "retry.max.attempts", "2",
             "retry.initial.backoff.ms", "10"));
         try {
-            task.put(List.of(record, update));
+            task.put(List.of(first, update));
         } finally {
             task.stop();
         }
@@ -76,8 +76,8 @@ class JdbcSinkPostgresIntegrationTest {
             statement.setString(1, "pg-event-1");
             try (var result = statement.executeQuery()) {
                 assertTrue(result.next());
-                assertEquals("created", result.getString("event_type"));
-                assertEquals("{\"source\":\"postgres-integration\"}", result.getString("payload"));
+                assertEquals("updated", result.getString("event_type"));
+                assertEquals("{\"source\":\"upsert\"}", result.getString("payload"));
             }
         }
     }
