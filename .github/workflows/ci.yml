@@ -52,9 +52,11 @@ jobs:
           cache: maven
       - name: Build connector plugins
         run: mvn --batch-mode --no-transfer-progress -DskipTests package
+      - name: Validate E2E smoke-test shell syntax
+        run: bash -n scripts/e2e-smoke.sh
       - name: Start Kafka, Schema Registry, Connect, MySQL and monitoring
         run: docker compose up -d
-      - name: Exercise REST-to-MySQL delivery and worker restart
+      - name: Exercise delivery, DLQ, rebalances, recovery and monitoring
         run: bash scripts/e2e-smoke.sh
       - name: Collect container logs on failure
         if: failure()
