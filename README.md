@@ -2,188 +2,108 @@
 
 [![CI](https://github.com/sajuu730/kafka-connect-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/sajuu730/kafka-connect-toolkit/actions/workflows/ci.yml)
 
-A Java-based toolkit for operating two reusable Kafka Connect integrations: an HTTP REST source and a relational JDBC sink. The repository is structured as independently packaged connector plugins with shared reliability primitives.
+A Java 17 multi-module project for custom Kafka Connect integrations: an HTTP REST source and a JDBC sink, with reliability primitives, containerized infrastructure and an evolving observability stack.
 
-> **Status:** Active development. The Maven reactor build and all 9 automated tests (including a PostgreSQL integration test) passed in GitHub Actions. Connector runtime behavior in a real Kafka Connect + PostgreSQL deployment is not yet covered by end-to-end tests, so this is not yet a production-readiness claim.
+> **Status: Active development.** MySQL 8.4 is now the primary local database target. The JDBC sink has a MySQL `ON DUPLICATE KEY UPDATE` SQL path and the local Compose stack includes Kafka, Schema Registry, Kafka Connect, MySQL, Prometheus, a JMX exporter and Grafana. This is not a production-readiness claim: incremental source semantics, per-record DLQ reporting, schema evolution and full end-to-end fault-recovery verification remain under development.
 
-## Capabilities
+## Current implementation
 
-### REST Source Connector
+### REST source
+- Java `HttpClient` polling with bounded connect/request timeouts
+- JSON object/array decoding and page-number pagination with a maximum-page guard
+- Stable record IDs emitted as Kafka Connect source offsets
+- Reads the saved source offset on task startup and resumes after that ID when it remains in the fetched snapshot
+- Capped exponential retry with jitter for transient HTTP and I/O failures
+- Optional bearer-token authentication
 
-- Polls an HTTP endpoint returning a JSON object or array
-- Emits JSON payloads as Kafka string values
-- Stores a stable record identifier as the Kafka Connect source offset
-- Resumes after the last committed identifier when that identifier remains in the API snapshot
-- Retries HTTP 429 and 5xx responses and I/O failures with capped exponential backoff and jitter
-- Supports optional bearer-token authentication without logging token values
-- Supports query-parameter page-number pagination with a configurable start page and a hard maximum-page guard
-- Uses bounded request and connection timeouts
+**Limitations:** the current checkpoint is based on a stable ID in a deterministic snapshot. It is not yet a general cursor/next-page-token implementation; disappearing IDs can cause snapshot replay. `Retry-After` header interpretation and robust incremental API cursor strategies remain roadmap work.
 
-**Current limitations:** no incremental cursor support, rate-limit header parsing, or custom field mapping. If the saved ID disappears from the returned snapshot, the task replays the snapshot. The API must provide stable, unique IDs and a deterministic order for meaningful resume behavior.
+### JDBC sink
+- `Struct` records written with prepared statements
+- Configurable JDBC batching and transaction-per-`put` behavior
+- MySQL-specific `INSERT ... ON DUPLICATE KEY UPDATE` when the JDBC URL is `jdbc:mysql:`
+- PostgreSQL/H2-compatible `ON CONFLICT` path retained for existing tests
+- Bounded retry for transient SQL execution errors; ambiguous commit failures fail the task rather than retrying blindly
 
-### JDBC Sink Connector
-
-- Writes Kafka Connect `Struct` values to a relational table
-- Uses prepared statements for record values and validates/quotes table identifiers
-- Executes bounded JDBC batches within a transaction per `put` call
-- Supports PostgreSQL `ON CONFLICT` upserts with explicit `pk.fields`
-- Rolls back failed batches and retries transient SQL execution failures with capped exponential backoff
-- Treats commit failures as ambiguous and delegates recovery to Kafka Connect's task retry behavior
-
-**Current limitations:** upsert mode uses PostgreSQL `ON CONFLICT` syntax and is PostgreSQL-specific; schema evolution, deletes, and automatic table creation are not implemented. The destination table must already exist and match the incoming Struct fields. At-least-once replay can create duplicate-key failures unless the target schema and upstream processing are designed for idempotency.
-
-### Shared engineering
-
-- Java 17 and Maven multi-module build
-- Shared bounded exponential retry policy
-- Per-task JMX counters for records, batches, requests, retries, failures, and last successful operation
-- JUnit 5 tests
-- Shaded plugin JARs with Kafka Connect service registration
-- Docker Compose environment for Kafka, Kafka Connect, and PostgreSQL
-- GitHub Actions verification workflow
+**Limitations:** schema evolution and `ErrantRecordReporter`-based record-level DLQ reporting are not implemented yet. Schema changes within a task currently fail explicitly. Worker-level Kafka Connect DLQ configuration is not equivalent to connector-managed reporting of malformed records.
 
 ## Technology
-
-| Area | Technology |
-|---|---|
-| Runtime | Java 17 |
-| Streaming | Apache Kafka Connect API 3.8.1 |
-| Build | Apache Maven |
-| Tests | JUnit 5, Mockito, PostgreSQL service integration testing |
-| Database | PostgreSQL 16 |
-| Local environment | Docker Compose |
-| CI | GitHub Actions |
+Java 17 · Apache Kafka Connect 3.8.1 · Maven · JUnit 5 · MySQL 8.4 · Docker Compose · Prometheus · Grafana
 
 ## Repository layout
-
 ```text
-kafka-connect-toolkit/
-├── common/                         # shared retry and reliability primitives
-├── connectors/
-│   ├── rest-source/                # HTTP -> Kafka source plugin
-│   └── jdbc-sink/                  # Kafka -> JDBC sink plugin
-├── config/                         # local database initialization
-├── docs/                           # architecture and operations
-├── docker-compose.yml
-└── .github/workflows/ci.yml
+common/                         shared retry and metrics utilities
+connectors/rest-source/         HTTP to Kafka source connector
+connectors/jdbc-sink/           Kafka to JDBC sink connector
+config/mysql-init.sql           local MySQL schema
+monitoring/                     JMX exporter, Prometheus and Grafana provisioning
+docs/                           architecture and operations
+docker-compose.yml              local infrastructure stack
 ```
 
 ## Quick start
-
-Prerequisites: JDK 17+, Maven 3.9+, and Docker with the Compose plugin.
-
-1. Build the connector plugin JARs:
-
-   ```bash
-   mvn --batch-mode clean package
-   ```
-
-2. Start the local Kafka Connect and PostgreSQL environment:
-
-   ```bash
-   docker compose up -d
-   ```
-
-3. Check that Kafka Connect is responding and discovers the plugins:
-
-   ```bash
-   curl http://localhost:8083/connector-plugins
-   ```
-
-The shaded plugin JARs are mounted from each module's `target/` directory. Rebuild and restart the Connect worker after changing connector code.
-
-## Connector configuration
-
-### REST Source
-
-POST a connector configuration to `http://localhost:8083/connectors`:
-
-```json
-{
-  "name": "rest-events-source",
-  "config": {
-    "connector.class": "io.github.sajuu730.connect.rest.RestSourceConnector",
-    "tasks.max": "1",
-    "rest.endpoint": "https://api.example.com/events",
-    "kafka.topic": "rest-events",
-    "record.id.field": "id",
-    "rest.auth.bearer.token": "REPLACE_WITH_SECRET_IF_REQUIRED",
-    "rest.pagination.page.parameter": "page",
-    "rest.pagination.start.page": "1",
-    "rest.pagination.max.pages": "100",
-    "poll.interval.ms": "5000",
-    "retry.max.attempts": "3",
-    "retry.initial.backoff.ms": "500"
-  }
-}
+Requirements: JDK 17+, Maven 3.9+, Docker Engine and Docker Compose plugin.
+```bash
+mvn --batch-mode clean package
+docker compose up -d
+docker compose ps
+curl http://localhost:8083/connector-plugins
 ```
 
-The API endpoint must return an object or array of objects, each with a stable `id` field (or the configured `record.id.field`). The bearer-token property is optional; use a Kafka Connect secret/config provider for production secrets and never commit real tokens. When page-number pagination is enabled, the connector requests pages until it receives an empty JSON array; the maximum page count is a safety limit.
+Local endpoints:
+- Kafka: `localhost:9092`
+- Schema Registry: `http://localhost:8081`
+- Kafka Connect REST: `http://localhost:8083`
+- MySQL: `localhost:3306` (database `connect_demo`)
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000` (local demo credentials only)
+- JMX exporter: `http://localhost:5556/metrics`
 
-### JDBC Sink
+The Compose stack uses plaintext listeners and demo credentials. It is for local development only. Build the connector JARs before starting Kafka Connect because the worker mounts module `target/` directories.
 
-The local Compose environment creates `public.events`. Configure the sink with a password supplied securely in your environment; do not commit real credentials:
-
+## MySQL sink configuration example
 ```json
 {
-  "name": "postgres-events-sink",
+  "name": "mysql-events-sink",
   "config": {
     "connector.class": "io.github.sajuu730.connect.jdbc.JdbcSinkConnector",
     "tasks.max": "1",
-    "connection.url": "jdbc:postgresql://postgres:5432/connect_demo",
+    "connection.url": "jdbc:mysql://mysql:3306/connect_demo",
     "connection.user": "connect",
-    "connection.password": "REPLACE_WITH_LOCAL_PASSWORD",
-    "table.name": "public.events",
+    "connection.password": "connect_local_only",
+    "table.name": "events",
     "insert.mode": "upsert",
     "pk.fields": "id",
-    "batch.size": "500",
-    "retry.max.attempts": "3",
-    "retry.initial.backoff.ms": "500"
+    "batch.size": "500"
   }
 }
 ```
 
-The sink expects Kafka Connect JSON records with schemas enabled and a `Struct` value whose field names match the table columns. The local worker is configured with JSON converters and schema support.
+The local password is demonstrative and must never be reused in a deployed environment. Configure production credentials through a Kafka Connect ConfigProvider or secret manager.
 
-## Reliability and error handling
+## Reliability semantics
+- Kafka Connect owns durable source offset commits; the connector emits an ID offset with each source record.
+- Sink writes are grouped into JDBC transactions for each `put` call.
+- SQL execution retry is limited to recognized transient failures.
+- A failed commit has an ambiguous outcome and is surfaced as a task failure.
+- Worker DLQ settings are configured locally, but record-level `ErrantRecordReporter` support is still planned.
+- Delivery should be treated as at-least-once; design keys and upsert semantics for idempotency.
 
-- Source offsets are emitted with each record; Kafka Connect controls durable offset commits. If the API does not retain the saved ID, the current snapshot is replayed.
-- The sink commits each successful `put` batch in one JDBC transaction. A failed SQL execution is rolled back before a retry.
-- A connection failure during commit can have an ambiguous outcome; the task fails rather than blindly replaying inside the connector.
-- The Compose worker enables Kafka Connect's worker-level error tolerance and dead-letter queue settings. The DLQ is for supported sink record/converter processing failures; it is not a substitute for handling source endpoint failures or task-level outages.
-- Kafka Connect worker and connector metrics are available through the Connect runtime/JMX when enabled by the deployment.
-
-See [Architecture](docs/architecture.md) and [Operations](docs/operations.md) for semantics and deployment notes.
+## Roadmap
+- [x] Java 17 Maven modules and shared bounded retry policy
+- [x] REST polling, bearer auth, page-number pagination and source offsets
+- [x] JDBC batching and transaction handling
+- [x] MySQL driver and MySQL upsert SQL dialect
+- [x] Local Kafka, Schema Registry, Kafka Connect and MySQL Compose services
+- [x] Prometheus, JMX exporter and provisioned Grafana dashboard scaffolding
+- [ ] Robust incremental cursor/checkpoint strategies and HTTP Retry-After support
+- [ ] MySQL Testcontainers integration and Kafka/Schema Registry end-to-end tests
+- [ ] Schema evolution policy and safe DDL handling
+- [ ] ErrantRecordReporter-based malformed-record DLQ routing
+- [ ] Validate JMX exporter mappings and dashboard metrics against a live stack
+- [ ] Fault-injection tests for task restart, rebalance, DB outage and recovery
 
 ## Verification
+Run `mvn --batch-mode verify`. CI status is shown by the badge above. Infrastructure and connector runtime behavior must be validated with Docker-based integration tests before claiming production readiness.
 
-**Latest verified CI run:** Maven `verify` passed; 9 tests passed across the common, REST source, and JDBC sink modules, including a real PostgreSQL service integration test. The workflow compiles the modules, executes unit tests plus a PostgreSQL service-backed JDBC integration test, and packages both shaded connector plugins.
-
-Run the full unit-test and packaging lifecycle:
-
-```bash
-mvn --batch-mode verify
-```
-
-CI runs this command on pushes and pull requests to `main`. Integration tests against a live Kafka worker and PostgreSQL are being expanded; passing unit tests alone is not a production-readiness claim.
-
-## Engineering roadmap
-
-- [x] Establish Java 17 Maven modules and shared retry policy
-- [x] Implement initial REST source polling, bearer authentication, and acknowledged source offsets
-- [x] Implement initial JDBC sink batching and transactional writes
-- [x] Add plugin packaging and service registration
-- [x] Add Docker Compose development environment and worker DLQ configuration
-- [x] Add REST bearer authentication and bounded page-number pagination
-- [ ] Add REST incremental cursor strategies
-- [x] Add configurable PostgreSQL JDBC upsert by primary-key fields
-- [ ] Add schema evolution
-- [x] Add a PostgreSQL service-backed integration test for JDBC sink writes
-- [ ] Add end-to-end tests against a running Kafka Connect worker and PostgreSQL
-- [x] Add per-task JMX counters and lifecycle cleanup
-- [ ] Add structured diagnostic logging and end-to-end operational dashboards
-- [ ] Verify supported Kafka/Connect versions and document production deployment
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Changes should include tests, documentation, and explicit failure semantics.
+See [Operations](docs/operations.md), [Architecture](docs/architecture.md) and [Contributing](CONTRIBUTING.md).
