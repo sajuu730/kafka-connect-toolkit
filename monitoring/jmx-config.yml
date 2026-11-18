@@ -1,0 +1,17 @@
+startDelaySeconds: 5
+hostPort: connect:9999
+username:
+password:
+rules:
+  - pattern: 'kafka.connect<type=connector-task-metrics, connector=(.+), task=(.+)><>(.+)'
+    name: kafka_connect_connector_task_$3
+    labels:
+      connector: "$1"
+      task: "$2"
+  - pattern: 'kafka.connect<type=connect-worker-metrics><>(.+)'
+    name: kafka_connect_worker_$1
+  - pattern: 'io.github.sajuu730.connect<type=task-metrics, name=(.+)><>(.+)'
+    name: kct_$2
+    labels:
+      task_name: "$1"
+  - pattern: '.*'
