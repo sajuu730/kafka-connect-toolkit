@@ -61,6 +61,8 @@ wait_for "toolkit records metric exposed" "curl -fsS http://localhost:5556/metri
 wait_for "Prometheus scrape target UP" "curl -fsS 'http://localhost:9090/api/v1/query?query=up%7Bjob%3D%22kafka-connect-jmx%22%7D' | grep -q '\\"1\\"'"
 wait_for "Grafana dashboard provisioned" "curl -fsS http://localhost:3000/api/dashboards/uid/kct-overview"
 
+wait_for "REST source offset persisted in Connect" "curl -fsS '$CONNECT_URL/connectors/kct-e2e-source/offsets' | grep -q 'e2e-1'"
+
 # Force a sink-task failure while MySQL is unavailable, then verify replay after recovery.
 docker compose stop mysql >/dev/null
 curl -fsS -X PUT "$CONNECT_URL/connectors/kct-recovery-source/config" \
@@ -87,7 +89,7 @@ wait_for "Connect worker after restart" "curl -fsS '$CONNECT_URL/'"
 wait_for "connectors RUNNING after restart" "curl -fsS '$CONNECT_URL/connectors/kct-e2e-source/status' | grep -q 'RUNNING' && curl -fsS '$CONNECT_URL/connectors/kct-e2e-sink/status' | grep -q 'RUNNING'"
 wait_for "idempotent row remains after worker restart" "docker exec '$MYSQL_CONTAINER' mysql -N -u'$MYSQL_USER' -p'$MYSQL_PASSWORD' '$MYSQL_DATABASE' -e \"SELECT COUNT(*) FROM events WHERE id='e2e-1'\" | grep -q '^1$'"
 
-echo "E2E smoke test passed: REST -> Kafka/Avro/Schema Registry -> JDBC/MySQL, including Connect worker restart."
+echo "E2E smoke test passed: REST -> Kafka/Avro/Schema Registry -> JDBC/MySQL, persisted source offsets, MySQL outage recovery, worker restart and monitoring."
 "
 
 # Allow the worker to flush source offsets before restarting it.
