@@ -30,7 +30,7 @@ A Java 17 multi-module project for custom Kafka Connect integrations: an HTTP RE
 - Additive-only schema evolution adds nullable columns for newly observed Struct fields; existing column types are not altered
 - Uses Kafka Connect `ErrantRecordReporter` for malformed non-Struct/empty records when the worker provides a DLQ reporter; waits for the report future before returning
 
-**Limitations:** schema evolution is deliberately additive-only and database-specific DDL must be reviewed before production use. A schema/DDL failure is treated as an infrastructure failure and fails the task; it is not mislabeled as a malformed record. Configure the worker DLQ topic and error handling settings for the reporter to route records.
+**Limitations:** schema evolution is deliberately additive-only and database-specific DDL must be reviewed before production use. A schema/DDL failure is treated as an infrastructure failure and fails the task; it is not mislabeled as a malformed record. Configure `errors.tolerance=all` and `errors.deadletterqueue.topic.name` on the sink connector for the reporter to route records.
 
 ## Technology
 Java 17 · Apache Kafka Connect 3.8.1 · Maven · JUnit 5 · MySQL 8.4 · Docker Compose · Prometheus · Grafana
@@ -91,7 +91,7 @@ The local password is demonstrative and must never be reused in a deployed envir
 - Sink writes are grouped into JDBC transactions for each `put` call.
 - SQL execution retry is limited to recognized transient failures.
 - A failed commit has an ambiguous outcome and is surfaced as a task failure.
-- Malformed record reporting uses the worker-provided `ErrantRecordReporter`; worker DLQ settings must be enabled for routing.
+- Malformed record reporting uses the worker-provided `ErrantRecordReporter`; configure `errors.tolerance=all` and `errors.deadletterqueue.topic.name` on the sink connector for routing.
 - Delivery should be treated as at-least-once; design keys and upsert semantics for idempotency.
 
 ## Roadmap
