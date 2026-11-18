@@ -47,7 +47,7 @@ A Java-based toolkit for operating two reusable Kafka Connect integrations: an H
 | Runtime | Java 17 |
 | Streaming | Apache Kafka Connect API 3.8.1 |
 | Build | Apache Maven |
-| Tests | JUnit 5, Mockito |
+| Tests | JUnit 5, Mockito, Testcontainers |
 | Database | PostgreSQL 16 |
 | Local environment | Docker Compose |
 | CI | GitHub Actions |
@@ -150,7 +150,7 @@ See [Architecture](docs/architecture.md) and [Operations](docs/operations.md) fo
 
 ## Verification
 
-**Latest verified CI run:** Maven `verify` passed; 7 tests passed across the common, REST source, and JDBC sink modules. The workflow compiles the modules, executes unit tests, and packages both shaded connector plugins.
+**Latest verified CI run:** Maven `verify` passed; 7 tests passed across the common, REST source, and JDBC sink modules. The workflow compiles the modules, executes unit tests plus a Docker-backed PostgreSQL Testcontainers integration test (skipped automatically when Docker is unavailable), and packages both shaded connector plugins.
 
 Run the full unit-test and packaging lifecycle:
 
@@ -169,7 +169,8 @@ CI runs this command on pushes and pull requests to `main`. Integration tests ag
 - [x] Add Docker Compose development environment and worker DLQ configuration
 - [ ] Add REST authentication, pagination, and incremental cursor strategies
 - [ ] Add configurable JDBC upsert and schema evolution
-- [ ] Add end-to-end tests against Kafka Connect and PostgreSQL
+- [x] Add a PostgreSQL Testcontainers integration test for JDBC sink writes
+- [ ] Add end-to-end tests against a running Kafka Connect worker and PostgreSQL
 - [x] Add per-task JMX counters and lifecycle cleanup
 - [ ] Add structured diagnostic logging and end-to-end operational dashboards
 - [ ] Verify supported Kafka/Connect versions and document production deployment
