@@ -60,7 +60,11 @@ docker exec "$KAFKA_CONTAINER" kafka-console-consumer --bootstrap-server kafka:2
 DLQ_CONSUMER_PID=$!
 sleep 2
 printf '%s\n' '{"schema":{"type":"string","optional":false},"payload":"not-a-struct"}' | docker exec -i "$KAFKA_CONTAINER" kafka-console-producer --bootstrap-server kafka:29092 --topic kct-dlq-test
-wait_for "malformed record delivered to DLQ" "grep -q 'not-a-struct' '$DLQ_CAPTURE'"
+if ! wait_for "malformed record delivered to DLQ" "grep -q 'not-a-struct' '$DLQ_CAPTURE'"; then
+  echo "DLQ consumer output:" >&2
+  cat "$DLQ_CAPTURE" >&2
+  exit 1
+fi
 kill "$DLQ_CONSUMER_PID" >/dev/null 2>&1 || true
 wait "$DLQ_CONSUMER_PID" >/dev/null 2>&1 || true
 DLQ_CONSUMER_PID=""
