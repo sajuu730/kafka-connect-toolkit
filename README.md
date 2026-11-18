@@ -1,78 +1,171 @@
 # Kafka Connect Toolkit
 
-A modular toolkit for building, operating, and testing reliable Apache Kafka Connect integrations.
+A Java-based toolkit for operating two reusable Kafka Connect integrations: an HTTP REST source and a relational JDBC sink. The repository is structured as independently packaged connector plugins with shared reliability primitives.
 
-> **Project status:** Initial implementation in progress. The repository currently establishes the project scope and engineering standards; connector capabilities will be marked complete only after implementation and automated verification.
+> **Status:** Active development. The initial connector implementations, local runtime, retry handling, and packaging are in place. Compatibility and operational behavior still require automated CI and integration verification before production use.
 
-## Objectives
+## Capabilities
 
-Kafka Connect deployments often repeat the same reliability and operational concerns across integrations. This project aims to provide reusable connector components and operational patterns for two common integration directions:
+### REST Source Connector
 
-- **REST Source Connector** — ingest records from HTTP APIs into Kafka, with configurable polling, pagination, request controls, and source offsets.
-- **JDBC Sink Connector** — deliver Kafka records to relational databases using batched writes, prepared statements, and configurable insert/upsert behavior.
+- Polls an HTTP endpoint returning a JSON object or array
+- Emits JSON payloads as Kafka string values
+- Stores a stable record identifier as the Kafka Connect source offset
+- Resumes after the last committed identifier when that identifier remains in the API snapshot
+- Retries HTTP 429 and 5xx responses and I/O failures with capped exponential backoff and jitter
+- Uses bounded request and connection timeouts
 
-Shared capabilities are planned around configuration validation, retry and backoff policies, dead-letter handling, structured diagnostics, metrics, and lifecycle management.
+**Current limitations:** no authentication, pagination, incremental cursor support, rate-limit parsing, or custom field mapping. If the saved ID disappears from the returned snapshot, the task replays the snapshot. The API must provide stable, unique IDs and a deterministic order for meaningful resume behavior.
 
-## Design principles
+### JDBC Sink Connector
 
-- Explicit delivery guarantees and documented failure semantics
-- Safe configuration defaults and fail-fast validation
-- Bounded retries, timeouts, and resource usage
-- Testable components with clear separation of concerns
-- Observable operation through metrics and structured logs
-- Reproducible local development and CI
+- Writes Kafka Connect `Struct` values to a relational table
+- Uses prepared statements for record values and validates/quotes table identifiers
+- Executes bounded JDBC batches within a transaction per `put` call
+- Rolls back failed batches and retries transient SQL execution failures with capped exponential backoff
+- Treats commit failures as ambiguous and delegates recovery to Kafka Connect's task retry behavior
 
-## Target technology
+**Current limitations:** INSERT-only; no upsert, schema evolution, deletes, or automatic table creation. The destination table must already exist and match the incoming Struct fields. At-least-once replay can create duplicate-key failures unless the target schema and upstream processing are designed for idempotency.
+
+### Shared engineering
+
+- Java 17 and Maven multi-module build
+- Shared bounded exponential retry policy
+- JUnit 5 tests
+- Shaded plugin JARs with Kafka Connect service registration
+- Docker Compose environment for Kafka, Kafka Connect, and PostgreSQL
+- GitHub Actions verification workflow
+
+## Technology
 
 | Area | Technology |
 |---|---|
-| Language | Java |
-| Connector API | Apache Kafka Connect |
+| Runtime | Java 17 |
+| Streaming | Apache Kafka Connect API 3.8.1 |
 | Build | Apache Maven |
-| Tests | JUnit 5, Testcontainers |
+| Tests | JUnit 5, Mockito |
+| Database | PostgreSQL 16 |
 | Local environment | Docker Compose |
 | CI | GitHub Actions |
-| Sink database | PostgreSQL |
-
-Exact dependency versions and compatibility targets will be pinned in the build as implementation lands.
 
 ## Repository layout
 
-The intended structure is:
-
 ```text
 kafka-connect-toolkit/
+├── common/                         # shared retry and reliability primitives
 ├── connectors/
-│   ├── rest-source/
-│   └── jdbc-sink/
-├── common/
-├── integration-tests/
-├── config/
-├── docs/
-└── .github/workflows/
+│   ├── rest-source/                # HTTP -> Kafka source plugin
+│   └── jdbc-sink/                  # Kafka -> JDBC sink plugin
+├── config/                         # local database initialization
+├── docs/                           # architecture and operations
+├── docker-compose.yml
+└── .github/workflows/ci.yml
 ```
 
-The layout may evolve as the implementation is validated.
+## Quick start
 
-## Getting started
+Prerequisites: JDK 17+, Maven 3.9+, and Docker with the Compose plugin.
 
-The first implementation milestone will provide a reproducible local Kafka Connect environment and working connector examples. Until that milestone is merged, there is no supported quick-start command.
+1. Build the connector plugin JARs:
+
+   ```bash
+   mvn --batch-mode clean package
+   ```
+
+2. Start the local Kafka Connect and PostgreSQL environment:
+
+   ```bash
+   docker compose up -d
+   ```
+
+3. Check that Kafka Connect is responding and discovers the plugins:
+
+   ```bash
+   curl http://localhost:8083/connector-plugins
+   ```
+
+The shaded plugin JARs are mounted from each module's `target/` directory. Rebuild and restart the Connect worker after changing connector code.
+
+## Connector configuration
+
+### REST Source
+
+POST a connector configuration to `http://localhost:8083/connectors`:
+
+```json
+{
+  "name": "rest-events-source",
+  "config": {
+    "connector.class": "io.github.sajuu730.connect.rest.RestSourceConnector",
+    "tasks.max": "1",
+    "rest.endpoint": "https://api.example.com/events",
+    "kafka.topic": "rest-events",
+    "record.id.field": "id",
+    "poll.interval.ms": "5000",
+    "retry.max.attempts": "3",
+    "retry.initial.backoff.ms": "500"
+  }
+}
+```
+
+The API endpoint must return an object or array of objects, each with a stable `id` field (or the configured `record.id.field`).
+
+### JDBC Sink
+
+The local Compose environment creates `public.events`. Configure the sink with a password supplied securely in your environment; do not commit real credentials:
+
+```json
+{
+  "name": "postgres-events-sink",
+  "config": {
+    "connector.class": "io.github.sajuu730.connect.jdbc.JdbcSinkConnector",
+    "tasks.max": "1",
+    "connection.url": "jdbc:postgresql://postgres:5432/connect_demo",
+    "connection.user": "connect",
+    "connection.password": "REPLACE_WITH_LOCAL_PASSWORD",
+    "table.name": "public.events",
+    "batch.size": "500",
+    "retry.max.attempts": "3",
+    "retry.initial.backoff.ms": "500"
+  }
+}
+```
+
+The sink expects Kafka Connect JSON records with schemas enabled and a `Struct` value whose field names match the table columns. The local worker is configured with JSON converters and schema support.
+
+## Reliability and error handling
+
+- Source offsets are emitted with each record; Kafka Connect controls durable offset commits. If the API does not retain the saved ID, the current snapshot is replayed.
+- The sink commits each successful `put` batch in one JDBC transaction. A failed SQL execution is rolled back before a retry.
+- A connection failure during commit can have an ambiguous outcome; the task fails rather than blindly replaying inside the connector.
+- The Compose worker enables Kafka Connect's worker-level error tolerance and dead-letter queue settings. The DLQ is for supported sink record/converter processing failures; it is not a substitute for handling source endpoint failures or task-level outages.
+- Kafka Connect worker and connector metrics are available through the Connect runtime/JMX when enabled by the deployment.
+
+See [Architecture](docs/architecture.md) and [Operations](docs/operations.md) for semantics and deployment notes.
+
+## Verification
+
+Run the full unit-test and packaging lifecycle:
+
+```bash
+mvn --batch-mode verify
+```
+
+CI runs this command on pushes and pull requests to `main`. Integration tests against a live Kafka worker and PostgreSQL are being expanded; passing unit tests alone is not a production-readiness claim.
 
 ## Engineering roadmap
 
-- [ ] Define module boundaries and supported Kafka/Connect versions
-- [ ] Implement shared configuration and error-handling primitives
-- [ ] Implement REST Source connector with offset management
-- [ ] Implement JDBC Sink connector with batching and safe SQL handling
-- [ ] Add unit and integration coverage
-- [ ] Add Docker-based local environment
-- [ ] Add metrics, operational documentation, and CI checks
-- [ ] Document delivery semantics, limitations, and production deployment guidance
+- [x] Establish Java 17 Maven modules and shared retry policy
+- [x] Implement initial REST source polling and source offsets
+- [x] Implement initial JDBC sink batching and transactional writes
+- [x] Add plugin packaging and service registration
+- [x] Add Docker Compose development environment and worker DLQ configuration
+- [ ] Add REST authentication, pagination, and incremental cursor strategies
+- [ ] Add configurable JDBC upsert and schema evolution
+- [ ] Add end-to-end tests against Kafka Connect and PostgreSQL
+- [ ] Add connector-specific metrics and structured diagnostic logging
+- [ ] Verify supported Kafka/Connect versions and document production deployment
 
 ## Contributing
 
-Contributions should include tests and documentation for behavior changes. See [CONTRIBUTING.md](CONTRIBUTING.md) once the contributor workflow is added.
-
-## License
-
-A license will be added before the project is distributed for reuse.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Changes should include tests, documentation, and explicit failure semantics.
