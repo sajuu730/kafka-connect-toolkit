@@ -2,7 +2,7 @@
   "title": "Kafka Connect Toolkit",
   "uid": "kct-overview",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "panels": [
     {
@@ -15,7 +15,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(kafka_connect_connector_task_sink_record_send_total[5m]))",
+          "expr": "sum(rate(kct_records_processed_total[5m]))",
           "legendFormat": "records/sec"
         }
       ],
@@ -36,7 +36,7 @@
       },
       "targets": [
         {
-          "expr": "sum(kafka_connect_connector_task_error_total)",
+          "expr": "sum(kct_failures_total)",
           "legendFormat": "errors"
         }
       ],
@@ -70,7 +70,7 @@
     },
     {
       "id": 4,
-      "title": "DLQ send rate (depends on exporter metric mapping)",
+      "title": "DLQ records routed",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -78,7 +78,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(kafka_connect_deadletterqueue_record_send_total[5m]))",
+          "expr": "sum(rate(kct_dlq_records_routed_total[5m]))",
           "legendFormat": "DLQ records/sec"
         }
       ],
@@ -87,6 +87,48 @@
         "w": 12,
         "x": 12,
         "y": 8
+      }
+    },
+    {
+      "id": 5,
+      "title": "Retry rate",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(kct_retries_total[5m]))",
+          "legendFormat": "retries/sec"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      }
+    },
+    {
+      "id": 6,
+      "title": "Last successful operation",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "max(kct_last_success_time_epoch_ms)",
+          "legendFormat": "epoch ms"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
       }
     }
   ],
