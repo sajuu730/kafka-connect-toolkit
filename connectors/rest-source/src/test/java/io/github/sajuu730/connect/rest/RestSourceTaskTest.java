@@ -112,5 +112,48 @@ class RestSourceTaskTest {
         task.stop();
     }
 
+    @Test void retriesRateLimitedRequestAndHonorsZeroRetryAfter() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        server.createContext("/events", exchange -> {
+            byte[] body;
+            if (calls.incrementAndGet() == 1) {
+                exchange.getResponseHeaders().add("Retry-After", "0");
+                body = "{\\"error\\":\\"rate limited\\"}".getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(429, body.length);
+            } else {
+                body = "[{\\"id\\":\\"after-limit\\"}]".getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, body.length);
+            }
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+
+        OffsetStorageReader offsets = mock(OffsetStorageReader.class);
+        when(offsets.offset(Map.of("endpoint", endpoint()))).thenReturn(null);
+        SourceTaskContext context = mock(SourceTaskContext.class);
+        when(context.offsetStorageReader()).thenReturn(offsets);
+        RestSourceTask task = new RestSourceTask();
+        task.initialize(context);
+        task.start(Map.of("rest.endpoint", endpoint(), "kafka.topic", "events",
+            "poll.interval.ms", "100", "retry.max.attempts", "2",
+            "retry.initial.backoff.ms", "1000"));
+        try {
+            List<SourceRecord> records = task.poll();
+            assertEquals(1, records.size());
+            assertEquals(Map.of("id", "after-limit"), records.get(0).sourceOffset());
+            assertEquals(2, calls.get());
+        } finally {
+            task.stop();
+        }
+    }
+
+    @Test void parsesRetryAfterDeltaSecondsAndFallsBackForInvalidValues() {
+        assertEquals(0L, RestSourceTask.parseRetryAfterMillis("0"));
+        assertEquals(2000L, RestSourceTask.parseRetryAfterMillis("2"));
+        assertEquals(-1L, RestSourceTask.parseRetryAfterMillis("not-a-date"));
+    }
+
     private String endpoint() { return "http://127.0.0.1:" + server.getAddress().getPort() + "/events"; }
 }
