@@ -4,6 +4,10 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
+import org.apache.kafka.connect.sink.ErrantRecordReporter;
+import java.util.concurrent.CompletableFuture;
+import static org.mockito.Mockito.*;
 import org.junit.jupiter.api.Test;
 import java.sql.DriverManager;
 import java.util.List;
@@ -20,6 +24,31 @@ class JdbcSinkTaskTest {
                 "connection.password", "unused",
                 "table.name", "events; DROP TABLE users")));
         assertTrue(error.getMessage().contains("Unsafe table.name"));
+    }
+
+    @Test void reportsMalformedRecordsToErrantRecordReporter() throws Exception {
+        String url = "jdbc:h2:mem:jdbc_sink_dlq_test;DB_CLOSE_DELAY=-1";
+        try (var connection = DriverManager.getConnection(url, "sa", "");
+             var statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE events (id VARCHAR(128) PRIMARY KEY)");
+        }
+        ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+        when(reporter.report(any(SinkRecord.class), any(Throwable.class)))
+            .thenReturn(CompletableFuture.completedFuture(null));
+        SinkTaskContext context = mock(SinkTaskContext.class);
+        when(context.errantRecordReporter()).thenReturn(reporter);
+        JdbcSinkTask task = new JdbcSinkTask();
+        task.initialize(context);
+        task.start(Map.of("connection.url", url, "connection.user", "sa",
+            "connection.password", "", "table.name", "events"));
+        SinkRecord malformed = new SinkRecord("events", 0, null, null,
+            Schema.STRING_SCHEMA, "not-a-struct", 0L);
+        try {
+            task.put(List.of(malformed));
+            verify(reporter).report(eq(malformed), any(Throwable.class));
+        } finally {
+            task.stop();
+        }
     }
 
     @Test void writesStructRecordsInBatchesAndCommits() throws Exception {
