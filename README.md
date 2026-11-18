@@ -32,6 +32,7 @@ A Java-based toolkit for operating two reusable Kafka Connect integrations: an H
 
 - Java 17 and Maven multi-module build
 - Shared bounded exponential retry policy
+- Per-task JMX counters for records, batches, requests, retries, failures, and last successful operation
 - JUnit 5 tests
 - Shaded plugin JARs with Kafka Connect service registration
 - Docker Compose environment for Kafka, Kafka Connect, and PostgreSQL
@@ -165,7 +166,8 @@ CI runs this command on pushes and pull requests to `main`. Integration tests ag
 - [ ] Add REST authentication, pagination, and incremental cursor strategies
 - [ ] Add configurable JDBC upsert and schema evolution
 - [ ] Add end-to-end tests against Kafka Connect and PostgreSQL
-- [ ] Add connector-specific metrics and structured diagnostic logging
+- [x] Add per-task JMX counters and lifecycle cleanup
+- [ ] Add structured diagnostic logging and end-to-end operational dashboards
 - [ ] Verify supported Kafka/Connect versions and document production deployment
 
 ## Contributing
