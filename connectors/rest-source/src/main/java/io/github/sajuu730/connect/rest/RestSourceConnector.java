@@ -18,6 +18,7 @@ public final class RestSourceConnector extends SourceConnector {
     static final String PAGE_PARAMETER = "rest.pagination.page.parameter";
     static final String START_PAGE = "rest.pagination.start.page";
     static final String MAX_PAGES = "rest.pagination.max.pages";
+    static final String CURSOR_PARAMETER = "rest.incremental.cursor.parameter";
     static final ConfigDef CONFIG = new ConfigDef()
         .define(ENDPOINT, ConfigDef.Type.STRING, ConfigDef.Importance.HIGH, "HTTP endpoint returning a JSON array or object")
         .define(TOPIC, ConfigDef.Type.STRING, ConfigDef.Importance.HIGH, "Kafka topic for emitted records")
@@ -28,7 +29,8 @@ public final class RestSourceConnector extends SourceConnector {
         .define(BEARER_TOKEN, ConfigDef.Type.PASSWORD, "", ConfigDef.Importance.MEDIUM, "Optional bearer token; never log this value")
         .define(PAGE_PARAMETER, ConfigDef.Type.STRING, "", ConfigDef.Importance.LOW, "Optional query parameter used for page-number pagination")
         .define(START_PAGE, ConfigDef.Type.INT, 1, ConfigDef.Range.atLeast(0), ConfigDef.Importance.LOW, "First page number when pagination is enabled")
-        .define(MAX_PAGES, ConfigDef.Type.INT, 100, ConfigDef.Range.between(1, 10000), ConfigDef.Importance.MEDIUM, "Maximum pages fetched in one poll; exceeding the limit fails the poll");
+        .define(MAX_PAGES, ConfigDef.Type.INT, 100, ConfigDef.Range.between(1, 10000), ConfigDef.Importance.MEDIUM, "Maximum pages fetched in one poll; exceeding the limit fails the poll")
+        .define(CURSOR_PARAMETER, ConfigDef.Type.STRING, "", ConfigDef.Importance.LOW, "Optional API query parameter populated with the last committed record ID");
 
     private Map<String, String> props;
     @Override public void start(Map<String, String> props) {
@@ -44,7 +46,8 @@ public final class RestSourceConnector extends SourceConnector {
             BEARER_TOKEN, token.value(),
             PAGE_PARAMETER, (String) parsed.get(PAGE_PARAMETER),
             START_PAGE, parsed.get(START_PAGE).toString(),
-            MAX_PAGES, parsed.get(MAX_PAGES).toString());
+            MAX_PAGES, parsed.get(MAX_PAGES).toString(),
+            CURSOR_PARAMETER, (String) parsed.get(CURSOR_PARAMETER));
     }
     @Override public Class<? extends Task> taskClass() { return RestSourceTask.class; }
     @Override public List<Map<String, String>> taskConfigs(int maxTasks) {
