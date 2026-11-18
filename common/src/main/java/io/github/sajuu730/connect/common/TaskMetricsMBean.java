@@ -7,5 +7,6 @@ public interface TaskMetricsMBean {
     long getRequests();
     long getRetries();
     long getFailures();
+    long getDlqRecordsRouted();
     long getLastSuccessTimeEpochMs();
 }
