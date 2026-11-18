@@ -153,10 +153,42 @@ class RestSourceTaskTest {
         }
     }
 
+    @Test void sendsPersistedIdAsConfiguredApiCursor() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/events", exchange -> {
+            assertEquals("after=b", exchange.getRequestURI().getRawQuery());
+            byte[] body = "[{\"id\":\"c\"}]".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+
+        OffsetStorageReader offsets = mock(OffsetStorageReader.class);
+        when(offsets.offset(Map.of("endpoint", endpoint()))).thenReturn(Map.of("id", "b"));
+        SourceTaskContext context = mock(SourceTaskContext.class);
+        when(context.offsetStorageReader()).thenReturn(offsets);
+        RestSourceTask task = new RestSourceTask();
+        task.initialize(context);
+        task.start(Map.of("rest.endpoint", endpoint(), "kafka.topic", "events",
+            "rest.incremental.cursor.parameter", "after", "poll.interval.ms", "100"));
+        try {
+            List<SourceRecord> records = task.poll();
+            assertEquals(1, records.size());
+            assertEquals("c", ((Struct) records.get(0).value()).getString("id"));
+        } finally {
+            task.stop();
+        }
+    }
+
     @Test void parsesRetryAfterDeltaSecondsAndFallsBackForInvalidValues() {
         assertEquals(0L, RestSourceTask.parseRetryAfterMillis("0"));
         assertEquals(2000L, RestSourceTask.parseRetryAfterMillis("2"));
         assertEquals(-1L, RestSourceTask.parseRetryAfterMillis("not-a-date"));
+        String futureDate = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
+            .plusSeconds(2).format(java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME);
+        long dateDelay = RestSourceTask.parseRetryAfterMillis(futureDate);
+        assertTrue(dateDelay > 0 && dateDelay <= 2000);
     }
 
     private String endpoint() { return "http://127.0.0.1:" + server.getAddress().getPort() + "/events"; }
