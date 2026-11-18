@@ -2,7 +2,7 @@
   "title": "Kafka Connect Toolkit",
   "uid": "kct-overview",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "15s",
   "panels": [
     {
@@ -129,6 +129,27 @@
         "w": 12,
         "x": 12,
         "y": 16
+      }
+    },
+    {
+      "id": 7,
+      "title": "Maximum sink record lag",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "max(kafka_connect_connector_task_sink_record_lag_max)",
+          "legendFormat": "max sink lag"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
       }
     }
   ],
