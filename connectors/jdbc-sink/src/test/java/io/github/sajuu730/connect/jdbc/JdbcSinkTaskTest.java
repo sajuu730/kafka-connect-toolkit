@@ -24,7 +24,7 @@ class JdbcSinkTaskTest {
 
     @Test void writesStructRecordsInBatchesAndCommits() throws Exception {
         String url = "jdbc:h2:mem:jdbc_sink_test;DB_CLOSE_DELAY=-1";
-        try (var connection = DriverManager.getConnection(url);
+        try (var connection = DriverManager.getConnection(url, "sa", "");
              var statement = connection.createStatement()) {
             statement.execute("CREATE TABLE \"events\" (\"id\" VARCHAR(128) PRIMARY KEY, \"event_type\" VARCHAR(128), \"payload\" VARCHAR(512))");
         }
