@@ -52,7 +52,7 @@ class JdbcSinkTaskTest {
         task.put(records);
         task.stop();
 
-        try (var connection = DriverManager.getConnection(url);
+        try (var connection = DriverManager.getConnection(url, "sa", "");
              var statement = connection.createStatement();
              var result = statement.executeQuery("SELECT COUNT(*) FROM \"events\"")) {
             assertTrue(result.next());
