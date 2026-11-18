@@ -8,7 +8,7 @@ docker compose up -d
 docker compose ps
 curl http://localhost:8083/connector-plugins
 
-# Exercise REST -> Kafka/Avro/Schema Registry -> MySQL, including worker restart
+# Exercise REST -> Kafka/Avro/Schema Registry -> MySQL, DLQ routing, rebalances, MySQL recovery and monitoring
 bash scripts/e2e-smoke.sh
 ```
 Local services: Kafka `localhost:9092`, Schema Registry `http://localhost:8081`, Kafka Connect `http://localhost:8083`, MySQL `localhost:3306`, Prometheus `http://localhost:9090`, Grafana `http://localhost:3000`, and JMX exporter `http://localhost:5556/metrics`.
