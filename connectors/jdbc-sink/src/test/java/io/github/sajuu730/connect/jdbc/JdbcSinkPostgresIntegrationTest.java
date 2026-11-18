@@ -47,6 +47,11 @@ class JdbcSinkPostgresIntegrationTest {
             .put("event_type", "created")
             .put("payload", "{\"source\":\"postgres-integration\"}");
         SinkRecord record = new SinkRecord("events", 0, null, null, schema, value, 0L);
+        Struct updatedValue = new Struct(schema)
+            .put("id", "pg-event-1")
+            .put("event_type", "updated")
+            .put("payload", "{\\"source\\":\\"upsert\\"}");
+        SinkRecord update = new SinkRecord("events", 0, null, null, schema, updatedValue, 1L);
 
         JdbcSinkTask task = new JdbcSinkTask();
         task.start(Map.of(
@@ -54,11 +59,13 @@ class JdbcSinkPostgresIntegrationTest {
             "connection.user", user,
             "connection.password", password,
             "table.name", "public.events",
+            "insert.mode", "upsert",
+            "pk.fields", "id",
             "batch.size", "100",
             "retry.max.attempts", "2",
             "retry.initial.backoff.ms", "10"));
         try {
-            task.put(List.of(record));
+            task.put(List.of(record, update));
         } finally {
             task.stop();
         }
