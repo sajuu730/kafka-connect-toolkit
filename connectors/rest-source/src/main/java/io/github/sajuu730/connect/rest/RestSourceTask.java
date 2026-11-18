@@ -95,6 +95,7 @@ public final class RestSourceTask extends SourceTask {
             if (metrics != null) metrics.failure();
             throw ex;
         } catch (Exception ex) {
+            if (metrics != null) metrics.failure();
             throw new ConnectException("REST source poll failed", ex);
         }
     }
