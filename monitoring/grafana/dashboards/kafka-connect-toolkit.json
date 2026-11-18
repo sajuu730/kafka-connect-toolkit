@@ -1,0 +1,13 @@
+{
+  "title": "Kafka Connect Toolkit",
+  "uid": "kct-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "panels": [
+    {"id":1,"title":"Connector task records processed","type":"timeseries","gridPos":{"h":8,"w":12,"x":0,"y":0},"targets":[{"expr":"kct_recordsprocessed","legendFormat":"{{task_name}}"}]},
+    {"id":2,"title":"Connector retry count","type":"timeseries","gridPos":{"h":8,"w":12,"x":12,"y":0},"targets":[{"expr":"kct_retries","legendFormat":"{{task_name}}"}]},
+    {"id":3,"title":"Connect worker metrics","type":"timeseries","gridPos":{"h":8,"w":12,"x":0,"y":8},"targets":[{"expr":"kafka_connect_worker_*","legendFormat":"{{__name__}}"}]},
+    {"id":4,"title":"DLQ records (topic metrics, if exported)","type":"timeseries","gridPos":{"h":8,"w":12,"x":12,"y":8},"targets":[{"expr":"kafka_server_brokertopicmetrics_messagesin_total{topic=\"connect-dlq\"}","legendFormat":"DLQ messages"}]}
+  ]
+}
