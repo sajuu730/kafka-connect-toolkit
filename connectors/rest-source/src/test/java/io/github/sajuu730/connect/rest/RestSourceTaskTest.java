@@ -49,5 +49,29 @@ class RestSourceTaskTest {
         task.stop();
     }
 
+    @Test void resumesAfterThePersistedRecordId() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/events", exchange -> {
+            byte[] body = "[{\"id\":\"a\"},{\"id\":\"b\"},{\"id\":\"c\"}]".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+
+        OffsetStorageReader offsets = mock(OffsetStorageReader.class);
+        when(offsets.offset(Map.of("endpoint", endpoint()))).thenReturn(Map.of("id", "b"));
+        SourceTaskContext context = mock(SourceTaskContext.class);
+        when(context.offsetStorageReader()).thenReturn(offsets);
+
+        RestSourceTask task = new RestSourceTask();
+        task.initialize(context);
+        task.start(Map.of("rest.endpoint", endpoint(), "kafka.topic", "events", "poll.interval.ms", "100"));
+        List<SourceRecord> records = task.poll();
+        assertEquals(1, records.size());
+        assertEquals(Map.of("id", "c"), records.get(0).sourceOffset());
+        task.stop();
+    }
+
     private String endpoint() { return "http://127.0.0.1:" + server.getAddress().getPort() + "/events"; }
 }
