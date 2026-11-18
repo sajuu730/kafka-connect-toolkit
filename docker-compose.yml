@@ -60,7 +60,7 @@ services:
       CONNECT_ERRORS_LOG_ENABLE: "true"
       CONNECT_ERRORS_LOG_INCLUDE_MESSAGES: "false"
       JMX_PORT: 9999
-      KAFKA_JMX_OPTS: "-Djava.rmi.server.hostname=connect -Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false"
+      KAFKA_JMX_OPTS: "-Djava.rmi.server.hostname=connect -Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.port=9999 -Dcom.sun.management.jmxremote.rmi.port=9999 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false"
     volumes:
       - ./connectors/rest-source/target:/opt/connectors/rest-source:ro
       - ./connectors/jdbc-sink/target:/opt/connectors/jdbc-sink:ro
@@ -95,7 +95,7 @@ services:
       CONNECT_ERRORS_LOG_ENABLE: "true"
       CONNECT_ERRORS_LOG_INCLUDE_MESSAGES: "false"
       JMX_PORT: 9999
-      KAFKA_JMX_OPTS: "-Djava.rmi.server.hostname=connect-worker-2 -Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false"
+      KAFKA_JMX_OPTS: "-Djava.rmi.server.hostname=connect-worker-2 -Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.port=9999 -Dcom.sun.management.jmxremote.rmi.port=9999 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false"
     volumes:
       - ./connectors/rest-source/target:/opt/connectors/rest-source:ro
       - ./connectors/jdbc-sink/target:/opt/connectors/jdbc-sink:ro
