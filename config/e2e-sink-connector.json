@@ -8,5 +8,9 @@
   "table.name": "events",
   "insert.mode": "upsert",
   "pk.fields": "id",
-  "batch.size": "2"
+  "batch.size": "2",
+  "errors.tolerance": "all",
+  "errors.deadletterqueue.topic.name": "connect-dlq",
+  "errors.deadletterqueue.context.headers.enable": "true",
+  "errors.log.enable": "true"
 }
