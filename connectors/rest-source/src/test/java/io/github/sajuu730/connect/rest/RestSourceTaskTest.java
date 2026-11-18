@@ -46,6 +46,10 @@ class RestSourceTaskTest {
         assertEquals(Map.of("id", "a"), records.get(0).sourceOffset());
         assertEquals(Map.of("id", "b"), records.get(1).sourceOffset());
         assertEquals("{\"id\":\"a\",\"type\":\"created\"}", records.get(0).value());
+        task.commitRecord(records.get(0), null);
+        List<SourceRecord> afterAcknowledgement = task.poll();
+        assertEquals(1, afterAcknowledgement.size());
+        assertEquals(Map.of("id", "b"), afterAcknowledgement.get(0).sourceOffset());
         task.stop();
     }
 
