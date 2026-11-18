@@ -40,6 +40,7 @@ wait_for "initial REST record delivered to MySQL" "docker exec '$MYSQL_CONTAINER
 wait_for "JMX exporter metrics endpoint" "curl --connect-timeout 2 --max-time 5 -fsS http://localhost:5556/metrics"
 wait_for "toolkit records metric exposed" "curl --connect-timeout 2 --max-time 5 -fsS http://localhost:5556/metrics | grep -q 'kct_records_processed_total'"
 wait_for "Prometheus ready" "curl --connect-timeout 2 --max-time 5 -fsS http://localhost:9090/-/ready"
+wait_for "Prometheus scrape target UP" 'curl --connect-timeout 2 --max-time 5 -fsS "http://localhost:9090/api/v1/query?query=up%7Bjob%3D%22kafka-connect-jmx%22%7D" | jq -e ".data.result[0].value[1] == \\"1\\"" >/dev/null'
 wait_for "Prometheus sees toolkit metric" 'curl --connect-timeout 2 --max-time 5 -fsS "http://localhost:9090/api/v1/query?query=kct_records_processed_total" | grep -q "kct_records_processed_total"'
 wait_for "Grafana dashboard provisioned" "curl --connect-timeout 2 --max-time 5 -fsS http://localhost:3000/api/dashboards/uid/kct-overview"
 wait_for "REST source offset persisted in Connect" "curl --connect-timeout 2 --max-time 5 -fsS '$CONNECT_URL/connectors/kct-e2e-source/offsets' | grep -q 'e2e-1'"
