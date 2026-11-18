@@ -110,7 +110,7 @@ The local password is demonstrative and must never be reused in a deployed envir
 - [x] Additive nullable-column schema evolution policy
 - [ ] Broader database dialect coverage and schema-evolution fault tests
 - [x] ErrantRecordReporter-based malformed-record reporting
-- [x] Explicit JMX exporter mappings and Grafana panels for toolkit records, retries, failures, DLQ routing and last-success time
+- [x] Explicit JMX exporter mappings and Grafana panels for sink lag, throughput, retries, failures, DLQ routing and last-success time
 - [ ] Validate metric scrape and dashboard queries against a live stack
 - [x] Connect worker restart exercised by the end-to-end smoke test
 - [ ] Validate the expanded rebalance and database-outage/recovery scenarios in a successful CI run
