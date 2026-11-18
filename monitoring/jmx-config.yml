@@ -3,6 +3,48 @@ hostPort: connect:9999
 username:
 password:
 rules:
+  - pattern: 'io.github.sajuu730.connect<type=ConnectorTask, connector="([^"]+)", instance="([^"]+)"><>RecordsProcessed'
+    name: kct_records_processed_total
+    labels:
+      connector: "$1"
+      instance: "$2"
+    type: COUNTER
+  - pattern: 'io.github.sajuu730.connect<type=ConnectorTask, connector="([^"]+)", instance="([^"]+)"><>BatchesCompleted'
+    name: kct_batches_completed_total
+    labels:
+      connector: "$1"
+      instance: "$2"
+    type: COUNTER
+  - pattern: 'io.github.sajuu730.connect<type=ConnectorTask, connector="([^"]+)", instance="([^"]+)"><>Requests'
+    name: kct_http_requests_total
+    labels:
+      connector: "$1"
+      instance: "$2"
+    type: COUNTER
+  - pattern: 'io.github.sajuu730.connect<type=ConnectorTask, connector="([^"]+)", instance="([^"]+)"><>Retries'
+    name: kct_retries_total
+    labels:
+      connector: "$1"
+      instance: "$2"
+    type: COUNTER
+  - pattern: 'io.github.sajuu730.connect<type=ConnectorTask, connector="([^"]+)", instance="([^"]+)"><>Failures'
+    name: kct_failures_total
+    labels:
+      connector: "$1"
+      instance: "$2"
+    type: COUNTER
+  - pattern: 'io.github.sajuu730.connect<type=ConnectorTask, connector="([^"]+)", instance="([^"]+)"><>DlqRecordsRouted'
+    name: kct_dlq_records_routed_total
+    labels:
+      connector: "$1"
+      instance: "$2"
+    type: COUNTER
+  - pattern: 'io.github.sajuu730.connect<type=ConnectorTask, connector="([^"]+)", instance="([^"]+)"><>LastSuccessTimeEpochMs'
+    name: kct_last_success_time_epoch_ms
+    labels:
+      connector: "$1"
+      instance: "$2"
+    type: GAUGE
   - pattern: 'kafka.connect<type=connector-task-metrics, connector=(.+), task=(.+)><>(.+)'
     name: kafka_connect_connector_task_$3
     labels:
@@ -10,8 +52,4 @@ rules:
       task: "$2"
   - pattern: 'kafka.connect<type=connect-worker-metrics><>(.+)'
     name: kafka_connect_worker_$1
-  - pattern: 'io.github.sajuu730.connect<type=task-metrics, name=(.+)><>(.+)'
-    name: kct_$2
-    labels:
-      task_name: "$1"
   - pattern: '.*'
