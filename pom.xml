@@ -4,7 +4,7 @@
   <groupId>io.github.sajuu730</groupId><artifactId>kafka-connect-toolkit</artifactId><version>0.1.0-SNAPSHOT</version><packaging>pom</packaging>
   <name>Kafka Connect Toolkit</name>
   <modules><module>common</module><module>connectors/rest-source</module><module>connectors/jdbc-sink</module></modules>
-  <properties><maven.compiler.release>17</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding><kafka.version>3.8.1</kafka.version><junit.version>5.11.4</junit.version><testcontainers.version>1.20.4</testcontainers.version></properties>
+  <properties><maven.compiler.release>17</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding><kafka.version>3.8.1</kafka.version><junit.version>5.11.4</junit.version><testcontainers.version>1.21.3</testcontainers.version></properties>
   <dependencyManagement><dependencies>
     <dependency><groupId>org.apache.kafka</groupId><artifactId>connect-api</artifactId><version>${kafka.version}</version></dependency>
     <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>${junit.version}</version><scope>test</scope></dependency>
