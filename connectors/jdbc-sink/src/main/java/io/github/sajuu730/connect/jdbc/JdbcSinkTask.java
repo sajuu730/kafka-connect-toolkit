@@ -19,8 +19,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public final class JdbcSinkTask extends SinkTask {
+    private static final Logger LOG = Logger.getLogger(JdbcSinkTask.class.getName());
     private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?");
     private Connection connection;
     private String url;
@@ -69,6 +72,8 @@ public final class JdbcSinkTask extends SinkTask {
                     throw new ConnectException("JDBC batch execution failed after " + attempt + " attempt(s)", ex);
                 }
                 metrics.retry();
+                LOG.log(Level.WARNING, "Transient JDBC failure; retrying attempt {0}/{1}, SQLState={2}",
+                    new Object[]{attempt, retryPolicy.maxAttempts(), ex.getSQLState()});
                 reconnect();
                 sleepBeforeRetry(attempt);
                 continue;
