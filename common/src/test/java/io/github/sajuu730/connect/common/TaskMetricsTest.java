@@ -9,6 +9,7 @@ class TaskMetricsTest {
         metrics.request();
         metrics.retry();
         metrics.failure();
+        metrics.dlqRecordRouted();
         metrics.processed(3);
         metrics.batchCompleted();
         assertEquals(3, metrics.getRecordsProcessed());
@@ -16,6 +17,7 @@ class TaskMetricsTest {
         assertEquals(1, metrics.getRequests());
         assertEquals(1, metrics.getRetries());
         assertEquals(1, metrics.getFailures());
+        assertEquals(1, metrics.getDlqRecordsRouted());
         assertTrue(metrics.getLastSuccessTimeEpochMs() > 0);
         assertDoesNotThrow(metrics::close);
     }
