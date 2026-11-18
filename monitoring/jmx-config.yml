@@ -8,39 +8,21 @@ rules:
     type: COUNTER
   - pattern: 'io.github.sajuu730.connect<.*type=ConnectorTask.*><>BatchesCompleted'
     name: kct_batches_completed_total
-    labels:
-      connector: "$1"
-      instance: "$2"
     type: COUNTER
   - pattern: 'io.github.sajuu730.connect<.*type=ConnectorTask.*><>Requests'
     name: kct_http_requests_total
-    labels:
-      connector: "$1"
-      instance: "$2"
     type: COUNTER
   - pattern: 'io.github.sajuu730.connect<.*type=ConnectorTask.*><>Retries'
     name: kct_retries_total
-    labels:
-      connector: "$1"
-      instance: "$2"
     type: COUNTER
   - pattern: 'io.github.sajuu730.connect<.*type=ConnectorTask.*><>Failures'
     name: kct_failures_total
-    labels:
-      connector: "$1"
-      instance: "$2"
     type: COUNTER
   - pattern: 'io.github.sajuu730.connect<.*type=ConnectorTask.*><>DlqRecordsRouted'
     name: kct_dlq_records_routed_total
-    labels:
-      connector: "$1"
-      instance: "$2"
     type: COUNTER
   - pattern: 'io.github.sajuu730.connect<.*type=ConnectorTask.*><>LastSuccessTimeEpochMs'
     name: kct_last_success_time_epoch_ms
-    labels:
-      connector: "$1"
-      instance: "$2"
     type: GAUGE
   - pattern: 'kafka.connect<type=connector-task-metrics, connector=(.+), task=(.+)><>(.+)'
     name: kafka_connect_connector_task_$3
