@@ -6,6 +6,9 @@ import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.ErrantRecordReporter;
+import java.util.ArrayList;
+import java.util.concurrent.ExecutionException;
 import org.apache.kafka.connect.sink.SinkTask;
 import java.sql.*;
 import java.time.Duration;
@@ -27,6 +30,7 @@ public final class JdbcSinkTask extends SinkTask {
     private RetryPolicy retryPolicy;
     private TaskMetrics metrics;
     private List<String> columns = List.of();
+    private ErrantRecordReporter errantRecordReporter;
 
     @Override public void start(Map<String, String> props) {
         url = required(props, JdbcSinkConnector.URL);
@@ -46,23 +50,35 @@ public final class JdbcSinkTask extends SinkTask {
             throw new ConnectException("pk.fields must be configured when insert.mode=upsert");
         retryPolicy = new RetryPolicy(attempts, Duration.ofMillis(initialBackoff), Duration.ofSeconds(30), 0.2);
         openConnection();
+        errantRecordReporter = context == null ? null : context.errantRecordReporter();
         metrics = new TaskMetrics("jdbc-sink");
     }
 
     @Override public void put(Collection<SinkRecord> records) {
         if (records.isEmpty()) return;
+        List<SinkRecord> validRecords = new ArrayList<>();
         for (SinkRecord record : records) {
-            if (!(record.value() instanceof Struct struct))
-                throw new ConnectException("JDBC sink currently requires Struct record values");
+            if (!(record.value() instanceof Struct struct)) {
+                reportMalformed(record, new ConnectException("JDBC sink requires Struct record values"));
+                continue;
+            }
             List<String> rowColumns = struct.schema().fields().stream().map(Field::name).toList();
-            if (rowColumns.isEmpty()) throw new ConnectException("JDBC sink cannot insert a Struct with no fields");
+            if (rowColumns.isEmpty()) {
+                reportMalformed(record, new ConnectException("JDBC sink cannot insert a Struct with no fields"));
+                continue;
+            }
             if (columns.isEmpty()) columns = rowColumns;
-            if (!columns.equals(rowColumns))
-                throw new ConnectException("Record schema changed within task; schema evolution is not enabled for this task");
+            if (!columns.equals(rowColumns)) {
+                reportMalformed(record, new ConnectException(
+                    "Record schema changed within task; schema evolution is not enabled for this task"));
+                continue;
+            }
+            validRecords.add(record);
         }
+        if (validRecords.isEmpty()) return;
         for (int attempt = 1; attempt <= retryPolicy.maxAttempts(); attempt++) {
             try {
-                executeBatch(records);
+                executeBatch(validRecords);
             } catch (SQLException ex) {
                 rollbackQuietly(ex);
                 if (!isRetryable(ex) || attempt == retryPolicy.maxAttempts()) {
@@ -79,13 +95,32 @@ public final class JdbcSinkTask extends SinkTask {
             try {
                 connection.commit();
                 metrics.batchCompleted();
-                metrics.processed(records.size());
+                metrics.processed(validRecords.size());
                 return;
             } catch (SQLException ex) {
                 rollbackQuietly(ex);
                 metrics.failure();
                 throw new ConnectException("JDBC commit failed; outcome may be ambiguous", ex);
             }
+        }
+    }
+
+    /**
+     * Sends malformed individual records to the worker-configured DLQ reporter.
+     * Waiting for the reporter future ensures the DLQ write completes before
+     * this put call returns and Kafka Connect can commit the corresponding offsets.
+     */
+    private void reportMalformed(SinkRecord record, ConnectException failure) {
+        if (errantRecordReporter == null) {
+            throw new ConnectException("Malformed record cannot be skipped because ErrantRecordReporter is unavailable", failure);
+        }
+        try {
+            errantRecordReporter.report(record, failure).get();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new ConnectException("Interrupted while reporting malformed record to the DLQ", interrupted);
+        } catch (ExecutionException reportingFailure) {
+            throw new ConnectException("Failed to report malformed record to the DLQ", reportingFailure.getCause());
         }
     }
 
