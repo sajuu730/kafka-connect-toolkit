@@ -4,7 +4,7 @@
 
 A Java-based toolkit for operating two reusable Kafka Connect integrations: an HTTP REST source and a relational JDBC sink. The repository is structured as independently packaged connector plugins with shared reliability primitives.
 
-> **Status:** Active development. The Maven reactor build and all 7 current unit tests passed in GitHub Actions. Connector runtime behavior in a real Kafka Connect + PostgreSQL deployment is not yet covered by end-to-end tests, so this is not yet a production-readiness claim.
+> **Status:** Active development. The Maven reactor build and all 8 automated tests (including a PostgreSQL integration test) passed in GitHub Actions. Connector runtime behavior in a real Kafka Connect + PostgreSQL deployment is not yet covered by end-to-end tests, so this is not yet a production-readiness claim.
 
 ## Capabilities
 
@@ -16,9 +16,10 @@ A Java-based toolkit for operating two reusable Kafka Connect integrations: an H
 - Resumes after the last committed identifier when that identifier remains in the API snapshot
 - Retries HTTP 429 and 5xx responses and I/O failures with capped exponential backoff and jitter
 - Supports optional bearer-token authentication without logging token values
+- Supports query-parameter page-number pagination with a configurable start page and a hard maximum-page guard
 - Uses bounded request and connection timeouts
 
-**Current limitations:** no authentication, pagination, incremental cursor support, rate-limit parsing, or custom field mapping. If the saved ID disappears from the returned snapshot, the task replays the snapshot. The API must provide stable, unique IDs and a deterministic order for meaningful resume behavior.
+**Current limitations:** no incremental cursor support, rate-limit header parsing, or custom field mapping. If the saved ID disappears from the returned snapshot, the task replays the snapshot. The API must provide stable, unique IDs and a deterministic order for meaningful resume behavior.
 
 ### JDBC Sink Connector
 
@@ -106,6 +107,9 @@ POST a connector configuration to `http://localhost:8083/connectors`:
     "kafka.topic": "rest-events",
     "record.id.field": "id",
     "rest.auth.bearer.token": "REPLACE_WITH_SECRET_IF_REQUIRED",
+    "rest.pagination.page.parameter": "page",
+    "rest.pagination.start.page": "1",
+    "rest.pagination.max.pages": "100",
     "poll.interval.ms": "5000",
     "retry.max.attempts": "3",
     "retry.initial.backoff.ms": "500"
@@ -113,7 +117,7 @@ POST a connector configuration to `http://localhost:8083/connectors`:
 }
 ```
 
-The API endpoint must return an object or array of objects, each with a stable `id` field (or the configured `record.id.field`). The bearer-token property is optional; use a Kafka Connect secret/config provider for production secrets and never commit real tokens.
+The API endpoint must return an object or array of objects, each with a stable `id` field (or the configured `record.id.field`). The bearer-token property is optional; use a Kafka Connect secret/config provider for production secrets and never commit real tokens. When page-number pagination is enabled, the connector requests pages until it receives an empty JSON array; the maximum page count is a safety limit.
 
 ### JDBC Sink
 
@@ -150,7 +154,7 @@ See [Architecture](docs/architecture.md) and [Operations](docs/operations.md) fo
 
 ## Verification
 
-**Latest verified CI run:** Maven `verify` passed; 7 tests passed across the common, REST source, and JDBC sink modules. The workflow compiles the modules, executes unit tests plus a PostgreSQL service-backed JDBC integration test, and packages both shaded connector plugins.
+**Latest verified CI run:** Maven `verify` passed; 8 tests passed across the common, REST source, and JDBC sink modules, including a real PostgreSQL service integration test. The workflow compiles the modules, executes unit tests plus a PostgreSQL service-backed JDBC integration test, and packages both shaded connector plugins.
 
 Run the full unit-test and packaging lifecycle:
 
@@ -167,9 +171,10 @@ CI runs this command on pushes and pull requests to `main`. Integration tests ag
 - [x] Implement initial JDBC sink batching and transactional writes
 - [x] Add plugin packaging and service registration
 - [x] Add Docker Compose development environment and worker DLQ configuration
-- [ ] Add REST authentication, pagination, and incremental cursor strategies
+- [x] Add REST bearer authentication and bounded page-number pagination
+- [ ] Add REST incremental cursor strategies
 - [ ] Add configurable JDBC upsert and schema evolution
-- [x] Add a PostgreSQL Testcontainers integration test for JDBC sink writes
+- [x] Add a PostgreSQL service-backed integration test for JDBC sink writes
 - [ ] Add end-to-end tests against a running Kafka Connect worker and PostgreSQL
 - [x] Add per-task JMX counters and lifecycle cleanup
 - [ ] Add structured diagnostic logging and end-to-end operational dashboards
